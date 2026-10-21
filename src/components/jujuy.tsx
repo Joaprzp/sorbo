@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useAction, useQuery } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
 import { useNavigate } from "@tanstack/react-router";
@@ -280,11 +280,46 @@ function BloqueCrypto({
   const [website, setWebsite] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
+  const [display, setDisplay] = useState(crypto.address);
+  const animRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (animRef.current !== null) window.clearInterval(animRef.current);
+    };
+  }, []);
+
+  // Scramble tipo decrypt: corre una vez; hasta que termina no rearma.
+  const scramble = () => {
+    if (animRef.current !== null) return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const chars = "0123456789abcdef";
+    const frames = 24;
+    let frame = 0;
+    animRef.current = window.setInterval(() => {
+      frame++;
+      const revelados = Math.floor((frame / frames) * crypto.address.length);
+      setDisplay(
+        crypto.address
+          .split("")
+          .map((ch, i) =>
+            i < 2 || i < revelados ? ch : chars[Math.floor(Math.random() * chars.length)],
+          )
+          .join(""),
+      );
+      if (frame >= frames) {
+        if (animRef.current !== null) window.clearInterval(animRef.current);
+        animRef.current = null;
+        setDisplay(crypto.address);
+      }
+    }, 40);
+  };
 
   const copiar = async () => {
     await navigator.clipboard.writeText(crypto.address);
     setCopiado(true);
     setTimeout(() => setCopiado(false), 2000);
+    scramble();
   };
 
   const avisar = async (e: React.FormEvent) => {
@@ -335,7 +370,7 @@ function BloqueCrypto({
             onClick={copiar}
             className="break-all text-left font-mono text-[11px] uppercase tracking-[0.14em] text-azul underline-offset-4 hover:underline sm:text-xs"
           >
-            {crypto.address}
+            {display}
           </button>
           <p className="mt-3 font-mono text-[11px] uppercase tracking-[0.14em] text-azul/70">
             {copiado ? "Copiado." : "Tocá para copiar."}
