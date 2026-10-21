@@ -6,7 +6,8 @@ import { internal } from "./_generated/api";
 import { resolvePorts } from "./_lib/ports";
 import { ordenAcreditada, decisionExpiracion } from "./_lib/mpChecks";
 import { esTransferValida, centavosPorUsd } from "./_lib/evmChecks";
-import { CHAINS_SOPORTADAS } from "./_lib/dominio";
+import { CHAINS_SOPORTADAS, MIN_USD_CENTS } from "./_lib/dominio";
+import { ars } from "../src/lib/format";
 
 type Lector = { db: GenericDatabaseReader<DataModel> };
 type Escritor = { db: GenericDatabaseWriter<DataModel> };
@@ -120,6 +121,10 @@ export const acreditar = internalMutation({
           : campania.cumplidaAt,
     });
     await evento(ctx, args.id, "acreditada", t, String(args.aporteCentavos));
+    await ctx.scheduler.runAfter(0, internal.contributionsInternal.avisarAdmin, {
+      kind: "aporte",
+      contribucionId: args.id,
+    });
     if (c.email) {
       await ctx.scheduler.runAfter(0, internal.contributionsInternal.enviarNotificacion, {
         contribucionId: args.id,
@@ -130,7 +135,7 @@ export const acreditar = internalMutation({
       await ctx.scheduler.runAfter(
         0,
         internal.contributionsInternal.anunciarMetaCumplida,
-        { campaniaId: campania._id },
+        { campaniaId: campania._id, metaCentavos: campania.metaCentavos },
       );
     }
   },
@@ -156,16 +161,27 @@ export const contribuyentesConEmail = internalQuery({
 
 // Latch recién disparado: un mail a cada contribuyente que dejó email.
 export const anunciarMetaCumplida = internalAction({
-  args: { campaniaId: v.id("campaigns") },
-  handler: async (ctx, { campaniaId }) => {
+  args: { campaniaId: v.id("campaigns"), metaCentavos: v.optional(v.number()) },
+  handler: async (ctx, { campaniaId, metaCentavos }) => {
     const ports = resolvePorts();
-    if (!ports.mail) return;
-    const emails = await ctx.runQuery(
-      internal.contributionsInternal.contribuyentesConEmail,
-      { campaniaId },
-    );
+    const emails = ports.mail
+      ? await ctx.runQuery(
+          internal.contributionsInternal.contribuyentesConEmail,
+          { campaniaId },
+        )
+      : [];
     for (const to of emails) {
-      await ports.mail.send("meta_cumplida", to, {});
+      await ports.mail!.send("meta_cumplida", to, {});
+    }
+    if (metaCentavos !== undefined) {
+      await ports.push?.push({
+        title: "SORBO · META CUMPLIDA",
+        message: `Juntamos ${ars(metaCentavos)}. El próximo Sorbo es en Jujuy.`,
+        threadId: "sorbo",
+        sound: "upbeat_bells",
+        openUrl: `${process.env.SITE_URL ?? "https://sorbolabs.com"}/jujuy`,
+        interruptionLevel: "time-sensitive",
+      });
     }
   },
 });
@@ -311,6 +327,10 @@ export const marcarReembolsoFallido = internalMutation({
     const c = await ctx.db.get(id);
     if (!c) return;
     await ctx.db.patch(id, { refundEstado: "failed", refundError: error });
+    await ctx.scheduler.runAfter(0, internal.contributionsInternal.avisarAdmin, {
+      kind: "reembolso_fallido",
+      contribucionId: id,
+    });
   },
 });
 
@@ -566,7 +586,27 @@ export const escanearCrypto = internalAction({
         do {
           const res = await ports.evm.inboundTransfers(address, chain, cursor);
           for (const tx of res.transfers) {
-            if (!esTransferValida(tx, address)) continue;
+            if (!esTransferValida(tx, address)) {
+              // Llegó algo a la wallet que no cuenta: si parece plata real
+              // (no dust, no scam inflado), el admin tiene que saberlo.
+              if (tx.usdCents >= MIN_USD_CENTS && tx.usdCents <= 10_000_000) {
+                const nuevo = await ctx.runMutation(
+                  internal.contributionsInternal.registrarAviso,
+                  { clave: `rechazo:${tx.txHash}` },
+                );
+                if (nuevo) {
+                  await ctx.scheduler.runAfter(
+                    0,
+                    internal.contributionsInternal.avisarAdmin,
+                    {
+                      kind: "cripto_rechazada",
+                      detalle: `${tx.chain} · ${tx.asset} · USD ${(tx.usdCents / 100).toFixed(2)} · ${tx.txHash.slice(0, 12)}…`,
+                    },
+                  );
+                }
+              }
+              continue;
+            }
             mep ??= await ports.fx.mepCentavosPorUsd();
             const id = await ctx.runMutation(
               internal.contributionsInternal.crearObservadaCrypto,
@@ -673,6 +713,80 @@ export const porToken = internalQuery({
       .query("contribuciones")
       .withIndex("by_token", (q) => q.eq("token", token))
       .unique();
+  },
+});
+
+// Dedupe de avisos push: devuelve true solo la primera vez para una clave.
+export const registrarAviso = internalMutation({
+  args: { clave: v.string() },
+  handler: async (ctx, { clave }) => {
+    const existe = await ctx.db
+      .query("avisosAdmin")
+      .withIndex("by_clave", (q) => q.eq("clave", clave))
+      .first();
+    if (existe) return false;
+    await ctx.db.insert("avisosAdmin", { clave, at: Date.now() });
+    return true;
+  },
+});
+
+// Push al cel del admin (brrr). Arma el mensaje con estado fresco.
+export const avisarAdmin = internalAction({
+  args: {
+    kind: v.union(
+      v.literal("aporte"),
+      v.literal("reembolso_fallido"),
+      v.literal("cripto_rechazada"),
+    ),
+    contribucionId: v.optional(v.id("contribuciones")),
+    detalle: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const ports = resolvePorts();
+    if (!ports.push) return;
+    const base = process.env.SITE_URL ?? "https://sorbolabs.com";
+
+    if (args.kind === "cripto_rechazada") {
+      await ports.push.push({
+        title: "SORBO · LLEGÓ ALGO QUE NO CUENTA",
+        message: args.detalle ?? "transferencia inválida",
+        threadId: "sorbo",
+        sound: "bell_ringing",
+        openUrl: `${base}/jujuy`,
+      });
+      return;
+    }
+
+    const c = args.contribucionId
+      ? await ctx.runQuery(internal.contributionsInternal.porId, {
+          id: args.contribucionId,
+        })
+      : null;
+    if (!c) return;
+    const campania = await ctx.runQuery(
+      internal.contributionsInternal.campaniaDe,
+      { contribucionId: c._id },
+    );
+
+    if (args.kind === "aporte") {
+      const via = c.via === "mp" ? "Mercado Pago" : `cripto ${c.chain ?? ""}`.trim();
+      await ports.push.push({
+        title: "SORBO · APORTE",
+        message: `${ars(c.aporteCentavos ?? 0)} por ${via} · ${ars(campania?.recaudadoNetoCentavos ?? 0)} de ${ars(campania?.metaCentavos ?? 0)}`,
+        threadId: "sorbo",
+        sound: "cha_ching",
+        openUrl: `${base}/jujuy`,
+      });
+    } else {
+      await ports.push.push({
+        title: "SORBO · DEVOLUCIÓN FALLÓ",
+        message: `${ars(c.aporteCentavos ?? 0)} no se pudo devolver — ${c.refundError ?? "acción manual"}`,
+        threadId: "sorbo",
+        sound: "warm_soft_error",
+        openUrl: `${base}/jujuy`,
+        interruptionLevel: "time-sensitive",
+      });
+    }
   },
 });
 

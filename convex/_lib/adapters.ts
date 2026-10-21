@@ -10,6 +10,7 @@ import type {
   FxPort,
   MailPort,
   MailKind,
+  PushPort,
 } from "./ports";
 import { ANTIGUEDAD_MAX_BLOQUES, TOKEN_CONTRACTS } from "./dominio";
 import { MAIL_SUBJECTS, mailHtml, mailText } from "./mailPlantillas";
@@ -185,15 +186,10 @@ export class EvmIndexerHttp implements EvmPort {
     } | undefined;
     const confs = (blockNum?: string) =>
       blockNum && head ? Math.max(1, parseInt(head, 16) - parseInt(blockNum, 16) + 1) : 0;
-    // Reporta hechos on-chain; la validez la decide el dominio. Filtrar por
-    // contrato, nunca por símbolo — el indexer puede reportarlo distinto.
-    const contratos = new Set(
-      Object.values(TOKEN_CONTRACTS[chain] ?? {}).map((t) => t.address),
-    );
+    // Reporta hechos on-chain; la validez la decide el dominio. Se devuelven
+    // TODAS las erc20 entrantes: el dominio filtra por contrato, y el aviso
+    // de "llegó algo que no cuenta" necesita ver los tokens no soportados.
     const out: EvmTransfer[] = (r?.transfers ?? [])
-      .filter((t) =>
-        contratos.has(String(t.rawContract?.address ?? "").toLowerCase()),
-      )
       .map((t) => ({
         chain,
         txHash: String(t.hash),
@@ -278,5 +274,36 @@ export class ResendHttp implements MailPort {
       }),
     });
     if (!res.ok) throw new Error("MAIL_FALLO");
+  }
+}
+
+// Push al cel del admin vía brrr. Bearer en header: el secret no va en la URL.
+export class BrrrHttp implements PushPort {
+  constructor(private key: string) {}
+
+  async push(n: {
+    title: string;
+    message: string;
+    threadId?: string;
+    sound?: string;
+    openUrl?: string;
+    interruptionLevel?: "active" | "time-sensitive";
+  }) {
+    const res = await fetch("https://api.brrr.now/v1/send", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${this.key}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        title: n.title,
+        message: n.message,
+        thread_id: n.threadId,
+        sound: n.sound,
+        open_url: n.openUrl,
+        interruption_level: n.interruptionLevel,
+      }),
+    });
+    if (!res.ok) throw new Error(`brrr ${res.status}`);
   }
 }

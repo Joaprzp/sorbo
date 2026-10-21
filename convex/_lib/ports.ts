@@ -1,7 +1,7 @@
 // Puertos para dependencias externas (cat. 4 — true external).
 // Producción: adapters HTTP. Tests: fakes in-memory vía setPortsForTesting.
 // Si una env falta, el puerto es null → el rail se oculta en `progreso`.
-import { MpOrdersHttp, EvmIndexerHttp, FxHttp, ResendHttp } from "./adapters";
+import { MpOrdersHttp, EvmIndexerHttp, FxHttp, ResendHttp, BrrrHttp } from "./adapters";
 
 export interface MpOrderRequest {
   externalReference: string;
@@ -58,11 +58,25 @@ export interface MailPort {
   ): Promise<void>;
 }
 
+// Push al cel del admin (brrr). Distinto del mail transaccional: esto es
+// operación interna, no comunicación con el contribuyente.
+export interface PushPort {
+  push(n: {
+    title: string;
+    message: string;
+    threadId?: string;
+    sound?: string;
+    openUrl?: string;
+    interruptionLevel?: "active" | "time-sensitive";
+  }): Promise<void>;
+}
+
 export interface Ports {
   mp: MpPort | null;
   evm: EvmPort | null;
   fx: FxPort | null;
   mail: MailPort | null;
+  push: PushPort | null;
 }
 
 let overrides: Ports | null = null;
@@ -76,10 +90,12 @@ export function resolvePorts(): Ports {
   const mpToken = process.env.MP_ACCESS_TOKEN;
   const indexerKey = process.env.INDEXER_API_KEY;
   const resendKey = process.env.RESEND_API_KEY;
+  const brrrKey = process.env.BRRR_KEY;
   return {
     mp: mpToken ? new MpOrdersHttp(mpToken) : null,
     evm: indexerKey ? new EvmIndexerHttp(indexerKey) : null,
     fx: indexerKey ? new FxHttp() : null,
     mail: resendKey ? new ResendHttp(resendKey) : null,
+    push: brrrKey ? new BrrrHttp(brrrKey) : null,
   };
 }

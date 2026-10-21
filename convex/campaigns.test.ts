@@ -2,7 +2,7 @@ import { test, expect, vi } from "vitest";
 import { convexTest } from "convex-test";
 import schema from "./schema";
 import { api, internal } from "./_generated/api";
-import { setPortsForTesting, type MpPort, type EvmPort, type FxPort, type MailPort, type Ports } from "./_lib/ports";
+import { setPortsForTesting, type MpPort, type EvmPort, type FxPort, type MailPort, type PushPort, type Ports } from "./_lib/ports";
 import { CHAINS_SOPORTADAS } from "./_lib/dominio";
 
 const modules = import.meta.glob("./**/*.ts");
@@ -65,8 +65,15 @@ class EvmFake implements EvmPort {
 
 const evmVacio: EvmPort = new EvmFake();
 
+export const pushMemoria: PushPort & { enviados: { title: string; message: string }[] } = {
+  enviados: [],
+  async push(n) {
+    this.enviados.push({ title: n.title, message: n.message });
+  },
+};
+
 export function puertos(mp: MpPort | null, evm?: EvmPort): Ports {
-  return { mp, evm: evm ?? evmVacio, fx: fxFija, mail: mailMemoria };
+  return { mp, evm: evm ?? evmVacio, fx: fxFija, mail: mailMemoria, push: pushMemoria };
 }
 
 async function campania(t: ReturnType<typeof convexTest>, slug = "jujuy") {
@@ -584,6 +591,59 @@ test("claim por hash rechaza un depósito anterior a la campaña", async () => {
   expect(s!.estado).toBe("pendiente");
   const p = await t.query(api.campaigns.progreso, { slug: "jujuy" });
   expect(p!.contribuyentes).toBe(0);
+});
+
+test("aporte acreditado avisa al admin por push", async () => {
+  const t = convexTest(schema, modules);
+  await campania(t);
+  const evm = new EvmFake();
+  evm.transfers.push(txBase());
+  setPortsForTesting(puertos(null, evm));
+  pushMemoria.enviados.length = 0;
+
+  await t.action(internal.contributionsInternal.escanearCrypto, {});
+  await drenar(t);
+
+  expect(pushMemoria.enviados).toHaveLength(1);
+  expect(pushMemoria.enviados[0].title).toBe("SORBO · APORTE");
+  expect(pushMemoria.enviados[0].message).toContain("cripto");
+});
+
+test("transfer inválida a la wallet avisa una sola vez", async () => {
+  const t = convexTest(schema, modules);
+  await campania(t);
+  const evm = new EvmFake();
+  // Token no soportado: 8 USD de "DAI" — plata real que la campaña no cuenta.
+  evm.transfers.push(
+    txBase({ asset: "DAI", contract: "0x6b175474e89094c44da98b954eedeac495271d0f", usdCents: 800 }),
+  );
+  setPortsForTesting(puertos(null, evm));
+  pushMemoria.enviados.length = 0;
+
+  await t.action(internal.contributionsInternal.escanearCrypto, {});
+  await t.action(internal.contributionsInternal.escanearCrypto, {});
+  await drenar(t);
+
+  expect(pushMemoria.enviados).toHaveLength(1);
+  expect(pushMemoria.enviados[0].title).toBe("SORBO · LLEGÓ ALGO QUE NO CUENTA");
+  const p = await t.query(api.campaigns.progreso, { slug: "jujuy" });
+  expect(p!.contribuyentes).toBe(0);
+});
+
+test("dust rechazado no avisa", async () => {
+  const t = convexTest(schema, modules);
+  await campania(t);
+  const evm = new EvmFake();
+  evm.transfers.push(
+    txBase({ asset: "DAI", contract: "0x6b175474e89094c44da98b954eedeac495271d0f", usdCents: 150 }),
+  );
+  setPortsForTesting(puertos(null, evm));
+  pushMemoria.enviados.length = 0;
+
+  await t.action(internal.contributionsInternal.escanearCrypto, {});
+  await drenar(t);
+
+  expect(pushMemoria.enviados).toHaveLength(0);
 });
 
 test("scan es idempotente por txHash", async () => {

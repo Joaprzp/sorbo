@@ -50,6 +50,13 @@ export default defineSchema({
     .index("by_txHash", ["txHash"])
     .index("by_devolucion", ["via", "estado", "acreditadaAt"]),
 
+  // Dedupe de avisos push al admin (un txHash rechazado se re-escanea cada
+  // corrida dentro de la ventana — sin esto son ~2000 notificaciones).
+  avisosAdmin: defineTable({
+    clave: v.string(),
+    at: v.number(),
+  }).index("by_clave", ["clave"]),
+
   contributionEvents: defineTable({
     contribucionId: v.id("contribuciones"),
     tipo: v.string(),
