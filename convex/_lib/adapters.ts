@@ -153,9 +153,13 @@ export class EvmIndexerHttp implements EvmPort {
 
   async inboundTransfers(address: string, chain: string, cursor?: string) {
     const head = (await this.rpc(chain, "eth_blockNumber", [])) as string;
+    const ventana = ANTIGUEDAD_MAX_BLOQUES[chain];
+    if (ventana === undefined) {
+      throw new Error(`falta ANTIGUEDAD_MAX_BLOQUES para ${chain}`);
+    }
     // Solo la ventana reciente: la historia vieja de la wallet no es campaña.
-    const desde =
-      parseInt(head, 16) - (ANTIGUEDAD_MAX_BLOQUES[chain] ?? 0);
+    // +1 para alinear el borde con el check de confirmaciones del dominio.
+    const desde = parseInt(head, 16) - ventana + 1;
     const r = (await this.rpc(chain, "alchemy_getAssetTransfers", [
       {
         toAddress: address,

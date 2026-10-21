@@ -14,6 +14,12 @@ export function esTransferValida(
   // El contrato es la identidad del token; el símbolo que reporta el
   // indexer es ruido (USDT0 puede llegar como USDT, USDt, etc.).
   const contratos = Object.values(TOKEN_CONTRACTS[tx.chain] ?? {});
+  if (
+    CHAINS_SOPORTADAS.includes(tx.chain) &&
+    ANTIGUEDAD_MAX_BLOQUES[tx.chain] === undefined
+  ) {
+    throw new Error(`falta ANTIGUEDAD_MAX_BLOQUES para ${tx.chain}`);
+  }
   return (
     CHAINS_SOPORTADAS.includes(tx.chain) &&
     contratos.some((c) => c.address === tx.contract.toLowerCase()) &&

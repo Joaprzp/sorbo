@@ -18,9 +18,9 @@ export const ANTIGUEDAD_MAX_BLOQUES: Record<string, number> = {
   polygon: 300_000,    // ~2 s/bloque
   ethereum: 50_000,    // ~12 s/bloque
   optimism: 300_000,   // ~2 s/bloque
-  bsc: 200_000,        // ~3 s/bloque
-  celo: 120_000,       // ~5 s/bloque
-  monad: 600_000,      // <1 s/bloque
+  bsc: 800_000,        // ~0.75 s/bloque post-Maxwell
+  celo: 600_000,       // ~1 s/bloque post-L2
+  monad: 1_500_000,    // ~0.4 s/bloque
 };
 export const MIN_MP_CENTAVOS = 500_000; // $5.000 ARS
 export const SUGERIDOS_CENTAVOS = [500_000, 1_000_000, 2_500_000];

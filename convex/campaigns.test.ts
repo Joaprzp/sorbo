@@ -554,6 +554,38 @@ test("scan ignora un depósito anterior a la campaña (wallet con historia)", as
   expect(p!.contribuyentes).toBe(0);
 });
 
+test("claim por hash rechaza un depósito anterior a la campaña", async () => {
+  const t = convexTest(schema, modules);
+  await campania(t);
+  const evm = new EvmFake();
+  evm.transfers.push(
+    txBase({
+      chain: "bsc",
+      txHash: "0xviejo",
+      asset: "USDT",
+      contract: "0x55d398326f99059ff775485246999027b3197955",
+      usdCents: 4967,
+      confirmations: 90_000_000,
+    }),
+  );
+  setPortsForTesting(puertos(null, evm));
+
+  const r = await t.action(api.contributions.contribuir, {
+    slug: "jujuy",
+    via: { rail: "crypto", chainId: "bsc" },
+  });
+  await t.action(api.contributions.reconciliar, {
+    token: r.token,
+    txHash: "0xviejo",
+  });
+  await drenar(t);
+
+  const s = await t.query(api.contributions.seguimiento, { token: r.token });
+  expect(s!.estado).toBe("pendiente");
+  const p = await t.query(api.campaigns.progreso, { slug: "jujuy" });
+  expect(p!.contribuyentes).toBe(0);
+});
+
 test("scan es idempotente por txHash", async () => {
   const t = convexTest(schema, modules);
   await campania(t);
