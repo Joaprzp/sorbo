@@ -344,19 +344,6 @@ function BloqueCrypto({
       </div>
       <form onSubmit={avisar} className="flex max-w-md flex-col gap-4">
         <CampoTrampa value={website} onChange={setWebsite} />
-        <label
-          htmlFor="tx-hash"
-          className="font-mono text-[11px] uppercase tracking-[0.14em] text-azul/80"
-        >
-          ¿Ya mandaste? Pegá tu tx hash y lo seguimos
-        </label>
-        <input
-          id="tx-hash"
-          value={txHash}
-          onChange={(e) => setTxHash(e.target.value)}
-          placeholder="0x…"
-          className="w-full border-0 border-b border-azul/40 bg-transparent py-2 font-mono text-sm text-azul placeholder:text-azul/40 focus:border-azul focus:outline-none"
-        />
         <div
           role="group"
           aria-label="Red"
@@ -376,15 +363,33 @@ function BloqueCrypto({
               {c}
             </button>
           ))}
-          <input
-            type="email"
-            autoComplete="email"
-            aria-label="Email (opcional)"
-            placeholder="Email (opcional)"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className="min-w-40 flex-1 border-0 border-b border-azul/40 bg-transparent py-2 font-mono text-sm text-azul placeholder:text-azul/40 focus:border-azul focus:outline-none"
-          />
+        </div>
+        <label
+          htmlFor="tx-hash"
+          className="font-mono text-[11px] uppercase tracking-[0.14em] text-azul/80"
+        >
+          ¿Ya mandaste? Tx hash (opcional)
+        </label>
+        <input
+          id="tx-hash"
+          value={txHash}
+          onChange={(e) => setTxHash(e.target.value)}
+          placeholder="0x…"
+          className="w-full border-0 border-b border-azul/40 bg-transparent py-2 font-mono text-sm text-azul placeholder:text-azul/40 focus:border-azul focus:outline-none"
+        />
+        <p className="-mt-2 font-mono text-[11px] uppercase tracking-[0.14em] text-azul/60">
+          Si no lo pegás, lo encontramos igual.
+        </p>
+        <input
+          type="email"
+          autoComplete="email"
+          aria-label="Email (opcional)"
+          placeholder="Email (opcional)"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          className="w-full border-0 border-b border-azul/40 bg-transparent py-2 font-mono text-sm text-azul placeholder:text-azul/40 focus:border-azul focus:outline-none"
+        />
+        <div>
           <button
             type="submit"
             disabled={enviando}
