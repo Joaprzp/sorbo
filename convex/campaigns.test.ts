@@ -3,6 +3,7 @@ import { convexTest } from "convex-test";
 import schema from "./schema";
 import { api, internal } from "./_generated/api";
 import { setPortsForTesting, type MpPort, type EvmPort, type FxPort, type MailPort, type Ports } from "./_lib/ports";
+import { CHAINS_SOPORTADAS } from "./_lib/dominio";
 
 const modules = import.meta.glob("./**/*.ts");
 
@@ -457,7 +458,7 @@ test("contribuir crypto devuelve el intent de depósito", async () => {
   expect(r.intent).toMatchObject({
     kind: "deposit",
     address: "0xSORBOEVM",
-    chains: ["base", "polygon"],
+    chains: CHAINS_SOPORTADAS,
   });
   const s = await t.query(api.contributions.seguimiento, { token: r.token });
   expect(s).toMatchObject({ estado: "pendiente", via: "crypto" });

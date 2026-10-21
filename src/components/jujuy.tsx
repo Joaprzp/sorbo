@@ -306,7 +306,8 @@ function BloqueCrypto({
         Cripto
       </p>
       <p className="font-mono text-[11px] uppercase leading-relaxed tracking-[0.14em] text-azul/80">
-        USDC o USDT · Base o Polygon · Mínimo {crypto.minUsdCents / 100} USD
+        USDC o USDT · {crypto.chains.join(" · ")} · Mínimo{" "}
+        {crypto.minUsdCents / 100} USD
       </p>
       <p className="font-mono text-[11px] uppercase leading-relaxed tracking-[0.14em] text-alerta">
         No hay devolución en cripto.

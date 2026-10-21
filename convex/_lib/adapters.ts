@@ -16,6 +16,16 @@ import { MAIL_SUBJECTS, mailHtml, mailText } from "./mailPlantillas";
 
 const MP_API = "https://api.mercadopago.com";
 
+const ALCHEMY_NET: Record<string, string> = {
+  base: "base-mainnet",
+  polygon: "polygon-mainnet",
+  ethereum: "eth-mainnet",
+  optimism: "opt-mainnet",
+  bsc: "bnb-mainnet",
+  celo: "celo-mainnet",
+  monad: "monad-mainnet",
+};
+
 function centavosADecimal(c: number): string {
   return `${Math.floor(c / 100)}.${String(c % 100).padStart(2, "0")}`;
 }
@@ -126,7 +136,8 @@ export class EvmIndexerHttp implements EvmPort {
   constructor(private apiKey: string) {}
 
   private url(chain: string) {
-    const net = chain === "polygon" ? "polygon-mainnet" : "base-mainnet";
+    const net = ALCHEMY_NET[chain];
+    if (!net) throw new Error(`RED_SIN_INDEXER:${chain}`);
     return `https://${net}.g.alchemy.com/v2/${this.apiKey}`;
   }
 

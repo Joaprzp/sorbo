@@ -447,7 +447,12 @@ export const reclamarTx = internalAction({
     // La red declarada es una pista, no un hecho: se busca en todas.
     let tx = null;
     for (const chain of CHAINS_SOPORTADAS) {
-      tx = await ports.evm.getTx(chain, txHash);
+      try {
+        tx = await ports.evm.getTx(chain, txHash);
+      } catch (e) {
+        console.error(`getTx ${chain} falló`, e);
+        continue;
+      }
       if (tx) break;
     }
     if (!tx || !esTransferValida(tx, address)) return;
@@ -552,34 +557,39 @@ export const escanearCrypto = internalAction({
     if (!ports.evm || !ports.fx || !address) return;
     let mep: number | null = null;
     for (const chain of CHAINS_SOPORTADAS) {
-      // Pagina hasta agotar el indexer (tope defensivo: la dedupe por txHash
-      // hace seguro re-ver páginas viejas en la próxima corrida).
-      let cursor: string | undefined;
-      let paginas = 0;
-      do {
-        const res = await ports.evm.inboundTransfers(address, chain, cursor);
-        for (const tx of res.transfers) {
-          if (!esTransferValida(tx, address)) continue;
-          mep ??= await ports.fx.mepCentavosPorUsd();
-          const id = await ctx.runMutation(
-            internal.contributionsInternal.crearObservadaCrypto,
-            {
-              slug: "jujuy",
-              chain: tx.chain,
-              txHash: tx.txHash,
-              usdCents: tx.usdCents,
-              mepCentavosPorUsd: mep,
-            },
-          );
-          if (id) {
-            await ctx.runMutation(internal.contributionsInternal.acreditar, {
-              id,
-              aporteCentavos: centavosPorUsd(tx.usdCents, mep),
-            });
+      // Aislamiento por red: si un indexer/endpoint falla, las demás escanean igual.
+      try {
+        // Pagina hasta agotar el indexer (tope defensivo: la dedupe por txHash
+        // hace seguro re-ver páginas viejas en la próxima corrida).
+        let cursor: string | undefined;
+        let paginas = 0;
+        do {
+          const res = await ports.evm.inboundTransfers(address, chain, cursor);
+          for (const tx of res.transfers) {
+            if (!esTransferValida(tx, address)) continue;
+            mep ??= await ports.fx.mepCentavosPorUsd();
+            const id = await ctx.runMutation(
+              internal.contributionsInternal.crearObservadaCrypto,
+              {
+                slug: "jujuy",
+                chain: tx.chain,
+                txHash: tx.txHash,
+                usdCents: tx.usdCents,
+                mepCentavosPorUsd: mep,
+              },
+            );
+            if (id) {
+              await ctx.runMutation(internal.contributionsInternal.acreditar, {
+                id,
+                aporteCentavos: centavosPorUsd(tx.usdCents, mep),
+              });
+            }
           }
-        }
-        cursor = res.cursor;
-      } while (cursor && ++paginas < 20);
+          cursor = res.cursor;
+        } while (cursor && ++paginas < 20);
+      } catch (e) {
+        console.error(`scan ${chain} falló`, e);
+      }
     }
   },
 });
