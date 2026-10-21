@@ -68,11 +68,18 @@ export const contribuir = action({
         await ctx.runMutation(internal.contributionsInternal.expirar, { id });
         throw new Error("MP_FALLO", { cause: e });
       }
-      await ctx.runMutation(internal.contributionsInternal.vincularOrden, {
-        id,
-        mpOrderId: order.id,
-        checkoutUrl: order.checkoutUrl,
-      });
+      try {
+        await ctx.runMutation(internal.contributionsInternal.vincularOrden, {
+          id,
+          mpOrderId: order.id,
+          checkoutUrl: order.checkoutUrl,
+        });
+      } catch (e) {
+        console.error("vincularOrden falló", e);
+        await ports.mp.cancelOrder(order.id).catch(() => {});
+        await ctx.runMutation(internal.contributionsInternal.expirar, { id });
+        throw new Error("MP_FALLO", { cause: e });
+      }
       return { token, intent: { kind: "redirect" as const, url: order.checkoutUrl } };
     }
     if (args.via.rail === "crypto") {
