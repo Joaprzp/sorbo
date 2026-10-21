@@ -1,0 +1,19 @@
+# Material de trabajo local — no va al repo público
+refs/
+.DS_Store
+
+# Build y dependencias
+node_modules/
+dist/
+
+# Entorno y secretos
+.env
+.env.*
+!.env.example
+
+# Convex codegen
+convex/_generated/
+
+# Wrangler / Cloudflare local
+.wrangler/
+.dev.vars

@@ -1,0 +1,16 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Archivo", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, monospace;
+
+  --color-azul: oklch(46.23% 0.2655 264.86);
+  --color-noche: oklch(15.48% 0.077 262.87);
+  --color-nieve: oklch(98.78% 0.0013 106.42);
+  --color-bruma: oklch(90.9% 0.0249 275.89);
+}
+
+:where(a, button):focus-visible {
+  outline: 1px solid var(--color-nieve);
+  outline-offset: 4px;
+}
