@@ -6,7 +6,7 @@ import { internal } from "./_generated/api";
 import { resolvePorts } from "./_lib/ports";
 import { ordenAcreditada, decisionExpiracion } from "./_lib/mpChecks";
 import { esTransferValida, centavosPorUsd } from "./_lib/evmChecks";
-import { CHAINS_SOPORTADAS, MIN_USD_CENTS } from "./_lib/dominio";
+import { CHAINS_SOPORTADAS, MIN_USD_CENTS, TECHO_AVISO_USD_CENTS } from "./_lib/dominio";
 import { ars } from "../src/lib/format";
 
 type Lector = { db: GenericDatabaseReader<DataModel> };
@@ -174,14 +174,19 @@ export const anunciarMetaCumplida = internalAction({
       await ports.mail!.send("meta_cumplida", to, {});
     }
     if (metaCentavos !== undefined) {
-      await ports.push?.push({
-        title: "SORBO · META CUMPLIDA",
-        message: `Juntamos ${ars(metaCentavos)}. El próximo Sorbo es en Jujuy.`,
-        threadId: "sorbo",
-        sound: "upbeat_bells",
-        openUrl: `${process.env.SITE_URL ?? "https://sorbolabs.com"}/jujuy`,
-        interruptionLevel: "time-sensitive",
-      });
+      try {
+        await ports.push?.push({
+          title: "SORBO · META CUMPLIDA",
+          message: `Juntamos ${ars(metaCentavos)}. El próximo Sorbo es en Jujuy.`,
+          threadId: "sorbo",
+          sound: "upbeat_bells",
+          openUrl: `${process.env.SITE_URL ?? "https://sorbolabs.com"}/jujuy`,
+          interruptionLevel: "time-sensitive",
+        });
+      } catch (e) {
+        // brrr caído no rompe el fanout ni dispara retries de mail.
+        console.error("push meta_cumplida falló", e);
+      }
     }
   },
 });
@@ -576,35 +581,31 @@ export const escanearCrypto = internalAction({
     const address = process.env.EVM_ADDRESS;
     if (!ports.evm || !ports.fx || !address) return;
     let mep: number | null = null;
+    let avisosRechazo = 0;
+    // Aviso best-effort de "llegó algo que no cuenta": la dedupe vive en
+    // avisarAdmin (mark después de send) y se acota a 5 por corrida.
+    const avisarRechazo = async (tx: import("./_lib/ports").EvmTransfer) => {
+      if (avisosRechazo >= 5) return;
+      if (tx.usdCents < MIN_USD_CENTS || tx.usdCents > TECHO_AVISO_USD_CENTS) return;
+      avisosRechazo++;
+      await ctx.scheduler.runAfter(0, internal.contributionsInternal.avisarAdmin, {
+        kind: "cripto_rechazada",
+        detalle: `${tx.chain} · ${tx.asset} · USD ${(tx.usdCents / 100).toFixed(2)} · ${tx.txHash.slice(0, 12)}…`,
+        clave: `rechazo:${tx.chain}:${tx.txHash}`,
+      });
+    };
     for (const chain of CHAINS_SOPORTADAS) {
       // Aislamiento por red: si un indexer/endpoint falla, las demás escanean igual.
       try {
-        // Pagina hasta agotar el indexer (tope defensivo: la dedupe por txHash
-        // hace seguro re-ver páginas viejas en la próxima corrida).
+        // Feed de acreditación: solo contratos soportados — el spam de tokens
+        // no entra ni puede starvear depósitos reales del presupuesto de páginas.
         let cursor: string | undefined;
         let paginas = 0;
         do {
-          const res = await ports.evm.inboundTransfers(address, chain, cursor);
+          const res = await ports.evm.inboundTransfers(address, chain, cursor, true);
           for (const tx of res.transfers) {
             if (!esTransferValida(tx, address)) {
-              // Llegó algo a la wallet que no cuenta: si parece plata real
-              // (no dust, no scam inflado), el admin tiene que saberlo.
-              if (tx.usdCents >= MIN_USD_CENTS && tx.usdCents <= 10_000_000) {
-                const nuevo = await ctx.runMutation(
-                  internal.contributionsInternal.registrarAviso,
-                  { clave: `rechazo:${tx.txHash}` },
-                );
-                if (nuevo) {
-                  await ctx.scheduler.runAfter(
-                    0,
-                    internal.contributionsInternal.avisarAdmin,
-                    {
-                      kind: "cripto_rechazada",
-                      detalle: `${tx.chain} · ${tx.asset} · USD ${(tx.usdCents / 100).toFixed(2)} · ${tx.txHash.slice(0, 12)}…`,
-                    },
-                  );
-                }
-              }
+              await avisarRechazo(tx);
               continue;
             }
             mep ??= await ports.fx.mepCentavosPorUsd();
@@ -627,6 +628,19 @@ export const escanearCrypto = internalAction({
           }
           cursor = res.cursor;
         } while (cursor && ++paginas < 20);
+
+        // Feed de aviso: todo lo demás que llegó a la wallet (tokens no
+        // soportados). Sin presupuesto garantizado — es best-effort.
+        cursor = undefined;
+        paginas = 0;
+        do {
+          const res = await ports.evm.inboundTransfers(address, chain, cursor);
+          for (const tx of res.transfers) {
+            if (esTransferValida(tx, address)) continue; // ya la manejó el feed de acreditación
+            await avisarRechazo(tx);
+          }
+          cursor = res.cursor;
+        } while (cursor && ++paginas < 5);
       } catch (e) {
         console.error(`scan ${chain} falló`, e);
       }
@@ -653,7 +667,8 @@ export const reembolsosEstancados = internalQuery({
   },
 });
 
-// Cron ~3h: un refund `pendiente` que perdió su action (crash) se reinicia.
+// Cron ~3h: un refund `pendiente` que perdió su action (crash) se reinicia;
+// el que agotó reintentos se marca fallido — eso dispara el aviso al admin.
 export const barrerReembolsos = internalAction({
   args: { ahora: v.optional(v.number()) },
   handler: async (ctx, args) => {
@@ -672,6 +687,31 @@ export const barrerReembolsos = internalAction({
         { id: c._id },
       );
     }
+    const agotados = await ctx.runQuery(
+      internal.contributionsInternal.reembolsosAgotados,
+      {},
+    );
+    for (const c of agotados) {
+      await ctx.runMutation(internal.contributionsInternal.marcarReembolsoFallido, {
+        id: c._id,
+        error: "reintentos agotados",
+      });
+    }
+  },
+});
+
+export const reembolsosAgotados = internalQuery({
+  args: {},
+  handler: async (ctx) => {
+    const rows = await ctx.db
+      .query("contribuciones")
+      .withIndex("by_devolucion", (q) =>
+        q.eq("via", "mp").eq("estado", "aprobada"),
+      )
+      .collect();
+    return rows.filter(
+      (c) => c.refundEstado === "pendiente" && (c.refundIntentos ?? 0) >= 3,
+    );
   },
 });
 
@@ -716,6 +756,16 @@ export const porToken = internalQuery({
   },
 });
 
+export const avisoEnviado = internalQuery({
+  args: { clave: v.string() },
+  handler: async (ctx, { clave }) => {
+    return !!(await ctx.db
+      .query("avisosAdmin")
+      .withIndex("by_clave", (q) => q.eq("clave", clave))
+      .first());
+  },
+});
+
 // Dedupe de avisos push: devuelve true solo la primera vez para una clave.
 export const registrarAviso = internalMutation({
   args: { clave: v.string() },
@@ -740,6 +790,7 @@ export const avisarAdmin = internalAction({
     ),
     contribucionId: v.optional(v.id("contribuciones")),
     detalle: v.optional(v.string()),
+    clave: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const ports = resolvePorts();
@@ -747,6 +798,15 @@ export const avisarAdmin = internalAction({
     const base = process.env.SITE_URL ?? "https://sorbolabs.com";
 
     if (args.kind === "cripto_rechazada") {
+      // Send-then-mark: un crash entre medio duplica un aviso, nunca lo pierde.
+      if (
+        args.clave &&
+        (await ctx.runQuery(internal.contributionsInternal.avisoEnviado, {
+          clave: args.clave,
+        }))
+      ) {
+        return;
+      }
       await ports.push.push({
         title: "SORBO · LLEGÓ ALGO QUE NO CUENTA",
         message: args.detalle ?? "transferencia inválida",
@@ -754,6 +814,11 @@ export const avisarAdmin = internalAction({
         sound: "bell_ringing",
         openUrl: `${base}/jujuy`,
       });
+      if (args.clave) {
+        await ctx.runMutation(internal.contributionsInternal.registrarAviso, {
+          clave: args.clave,
+        });
+      }
       return;
     }
 

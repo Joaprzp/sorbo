@@ -40,7 +40,9 @@ export interface EvmTransfer {
 }
 
 export interface EvmPort {
-  inboundTransfers(address: string, chain: string, cursor?: string): Promise<{ transfers: EvmTransfer[]; cursor?: string }>;
+  // soloSoportados=true filtra por contrato en el indexer: el feed de
+  // acreditación no puede ser starveado por spam de tokens.
+  inboundTransfers(address: string, chain: string, cursor?: string, soloSoportados?: boolean): Promise<{ transfers: EvmTransfer[]; cursor?: string }>;
   getTx(chain: string, txHash: string, address?: string): Promise<EvmTransfer | null>;
 }
 
@@ -61,7 +63,7 @@ export interface MailPort {
 // Push al cel del admin (brrr). Distinto del mail transaccional: esto es
 // operación interna, no comunicación con el contribuyente.
 export interface PushPort {
-  push(n: {
+  push(aviso: {
     title: string;
     message: string;
     threadId?: string;

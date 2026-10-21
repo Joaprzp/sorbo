@@ -22,6 +22,9 @@ export const ANTIGUEDAD_MAX_BLOQUES: Record<string, number> = {
   celo: 600_000,       // ~1 s/bloque post-L2
   monad: 1_500_000,    // ~0.4 s/bloque
 };
+// Techo para avisar una transfer rechazada: por encima es casi seguro un
+// scam-token con decimales inflados, no plata real.
+export const TECHO_AVISO_USD_CENTS = 50_000_000;
 export const MIN_MP_CENTAVOS = 500_000; // $5.000 ARS
 export const SUGERIDOS_CENTAVOS = [500_000, 1_000_000, 2_500_000];
 

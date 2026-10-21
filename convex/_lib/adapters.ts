@@ -152,7 +152,12 @@ export class EvmIndexerHttp implements EvmPort {
     return json.result;
   }
 
-  async inboundTransfers(address: string, chain: string, cursor?: string) {
+  async inboundTransfers(
+    address: string,
+    chain: string,
+    cursor?: string,
+    soloSoportados?: boolean,
+  ) {
     const head = (await this.rpc(chain, "eth_blockNumber", [])) as string;
     const ventana = ANTIGUEDAD_MAX_BLOQUES[chain];
     if (ventana === undefined) {
@@ -170,6 +175,13 @@ export class EvmIndexerHttp implements EvmPort {
         maxCount: "0x64",
         fromBlock: `0x${Math.max(0, desde).toString(16)}`,
         toBlock: "latest",
+        ...(soloSoportados
+          ? {
+              contractAddresses: Object.values(TOKEN_CONTRACTS[chain] ?? {}).map(
+                (t) => t.address,
+              ),
+            }
+          : {}),
         ...(cursor ? { pageKey: cursor } : {}),
         order: "asc",
       },
@@ -281,7 +293,7 @@ export class ResendHttp implements MailPort {
 export class BrrrHttp implements PushPort {
   constructor(private key: string) {}
 
-  async push(n: {
+  async push(aviso: {
     title: string;
     message: string;
     threadId?: string;
@@ -296,12 +308,12 @@ export class BrrrHttp implements PushPort {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        title: n.title,
-        message: n.message,
-        thread_id: n.threadId,
-        sound: n.sound,
-        open_url: n.openUrl,
-        interruption_level: n.interruptionLevel,
+        title: aviso.title,
+        message: aviso.message,
+        thread_id: aviso.threadId,
+        sound: aviso.sound,
+        open_url: aviso.openUrl,
+        interruption_level: aviso.interruptionLevel,
       }),
     });
     if (!res.ok) throw new Error(`brrr ${res.status}`);
