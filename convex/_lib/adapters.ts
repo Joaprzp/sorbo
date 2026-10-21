@@ -11,7 +11,7 @@ import type {
   MailPort,
   MailKind,
 } from "./ports";
-import { TOKEN_CONTRACTS } from "./dominio";
+import { ANTIGUEDAD_MAX_BLOQUES, TOKEN_CONTRACTS } from "./dominio";
 import { MAIL_SUBJECTS, mailHtml, mailText } from "./mailPlantillas";
 
 const MP_API = "https://api.mercadopago.com";
@@ -152,6 +152,10 @@ export class EvmIndexerHttp implements EvmPort {
   }
 
   async inboundTransfers(address: string, chain: string, cursor?: string) {
+    const head = (await this.rpc(chain, "eth_blockNumber", [])) as string;
+    // Solo la ventana reciente: la historia vieja de la wallet no es campaña.
+    const desde =
+      parseInt(head, 16) - (ANTIGUEDAD_MAX_BLOQUES[chain] ?? 0);
     const r = (await this.rpc(chain, "alchemy_getAssetTransfers", [
       {
         toAddress: address,
@@ -159,6 +163,8 @@ export class EvmIndexerHttp implements EvmPort {
         withMetadata: false,
         excludeZeroValue: true,
         maxCount: "0x64",
+        fromBlock: `0x${Math.max(0, desde).toString(16)}`,
+        toBlock: "latest",
         ...(cursor ? { pageKey: cursor } : {}),
         order: "asc",
       },
@@ -173,7 +179,6 @@ export class EvmIndexerHttp implements EvmPort {
       }[];
       pageKey?: string;
     } | undefined;
-    const head = (await this.rpc(chain, "eth_blockNumber", [])) as string;
     const confs = (blockNum?: string) =>
       blockNum && head ? Math.max(1, parseInt(head, 16) - parseInt(blockNum, 16) + 1) : 0;
     // Reporta hechos on-chain; la validez la decide el dominio. Filtrar por

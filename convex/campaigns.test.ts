@@ -529,6 +529,31 @@ test("scan acredita USDT0 omnichain aunque el símbolo reportado varíe", async 
   expect(p!.contribuyentes).toBe(2);
 });
 
+test("scan ignora un depósito anterior a la campaña (wallet con historia)", async () => {
+  const t = convexTest(schema, modules);
+  await campania(t);
+  const evm = new EvmFake();
+  // La wallet aceptaba depósitos antes de la campaña: confirmaciones muy
+  // por encima de la ventana de antigüedad = historia, no aporte.
+  evm.transfers.push(
+    txBase({
+      chain: "bsc",
+      txHash: "0xviejo",
+      asset: "USDT",
+      contract: "0x55d398326f99059ff775485246999027b3197955",
+      usdCents: 4967,
+      confirmations: 90_000_000,
+    }),
+  );
+  setPortsForTesting(puertos(null, evm));
+
+  await t.action(internal.contributionsInternal.escanearCrypto, {});
+  await drenar(t);
+
+  const p = await t.query(api.campaigns.progreso, { slug: "jujuy" });
+  expect(p!.contribuyentes).toBe(0);
+});
+
 test("scan es idempotente por txHash", async () => {
   const t = convexTest(schema, modules);
   await campania(t);

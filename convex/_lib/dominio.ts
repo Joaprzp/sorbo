@@ -10,6 +10,18 @@ export const CHAINS_SOPORTADAS = [
 ];
 export const MIN_USD_CENTS = 500; // 5 USD — paridad con el latte
 export const MIN_CONFIRMACIONES = 1;
+// La wallet pudo tener historia anterior a la campaña: un depósito viejo no
+// es un aporte nuevo. Ventana ~7 días de bloques por red — las contribuciones
+// reales de esta campaña siempre caen adentro; el 2024, afuera.
+export const ANTIGUEDAD_MAX_BLOQUES: Record<string, number> = {
+  base: 300_000,       // ~2 s/bloque
+  polygon: 300_000,    // ~2 s/bloque
+  ethereum: 50_000,    // ~12 s/bloque
+  optimism: 300_000,   // ~2 s/bloque
+  bsc: 200_000,        // ~3 s/bloque
+  celo: 120_000,       // ~5 s/bloque
+  monad: 600_000,      // <1 s/bloque
+};
 export const MIN_MP_CENTAVOS = 500_000; // $5.000 ARS
 export const SUGERIDOS_CENTAVOS = [500_000, 1_000_000, 2_500_000];
 

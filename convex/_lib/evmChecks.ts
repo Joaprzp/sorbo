@@ -4,6 +4,7 @@ import {
   TOKEN_CONTRACTS,
   MIN_USD_CENTS,
   MIN_CONFIRMACIONES,
+  ANTIGUEDAD_MAX_BLOQUES,
 } from "./dominio";
 
 export function esTransferValida(
@@ -18,7 +19,8 @@ export function esTransferValida(
     contratos.some((c) => c.address === tx.contract.toLowerCase()) &&
     tx.to.toLowerCase() === address.toLowerCase() &&
     tx.usdCents >= MIN_USD_CENTS &&
-    tx.confirmations >= MIN_CONFIRMACIONES
+    tx.confirmations >= MIN_CONFIRMACIONES &&
+    tx.confirmations <= (ANTIGUEDAD_MAX_BLOQUES[tx.chain] ?? 0)
   );
 }
 
