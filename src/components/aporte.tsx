@@ -80,7 +80,7 @@ function Estado({ token }: { token: string }) {
         >
           <label
             htmlFor="tx-aporte"
-            className="font-mono text-xs uppercase tracking-[0.16em] text-nieve/70"
+            className="font-mono text-xs uppercase tracking-[0.16em] text-azul/80"
           >
             Pegá tu tx hash
           </label>
@@ -89,11 +89,11 @@ function Estado({ token }: { token: string }) {
             value={txHash}
             onChange={(e) => setTxHash(e.target.value)}
             placeholder="0x…"
-            className="w-full border-0 border-b border-nieve/40 bg-transparent py-2 font-mono text-sm text-nieve placeholder:text-nieve/40 focus:border-nieve focus:outline-none"
+            className="w-full border-0 border-b border-azul/40 bg-transparent py-2 font-mono text-sm text-azul placeholder:text-azul/40 focus:border-azul focus:outline-none"
           />
           <button
             type="submit"
-            className="mt-2 w-fit border border-nieve px-4 py-2 font-mono text-[11px] uppercase tracking-[0.14em] text-nieve hover:bg-nieve hover:text-azul"
+            className="mt-2 w-fit border border-azul px-4 py-2 font-mono text-[11px] uppercase tracking-[0.14em] text-azul hover:bg-azul hover:text-nieve"
           >
             Verificar
           </button>
@@ -102,7 +102,7 @@ function Estado({ token }: { token: string }) {
       {s.estado === "pendiente" && s.via === "mp" && s.checkoutUrl && (
         <a
           href={s.checkoutUrl}
-          className="mt-8 inline-block w-fit border border-nieve px-4 py-2 font-mono text-[11px] uppercase tracking-[0.14em] text-nieve hover:bg-nieve hover:text-azul"
+          className="mt-8 inline-block w-fit border border-azul px-4 py-2 font-mono text-[11px] uppercase tracking-[0.14em] text-azul hover:bg-azul hover:text-nieve"
         >
           Retomar el pago
         </a>
@@ -115,10 +115,11 @@ export function Aporte({ token }: { token: string }) {
   return (
     <Pieza
       lado={
-        <Link to="/jujuy" className="hover:text-nieve">
+        <Link to="/jujuy" className="hover:text-azul">
           Jujuy · AR
         </Link>
       }
+      doe={false}
     >
       <section className="flex flex-1 flex-col justify-center py-10">
         {token ? (

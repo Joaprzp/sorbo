@@ -23,7 +23,7 @@ export function WaitlistForm() {
 
   if (sent) {
     return (
-      <p className="font-mono text-xs uppercase tracking-[0.16em] text-nieve/70 sm:text-sm">
+      <p className="font-mono text-xs uppercase tracking-[0.16em] text-azul/80 sm:text-sm">
         Anotado. Te avisamos cuando abrimos.
       </p>
     );
@@ -42,7 +42,7 @@ export function WaitlistForm() {
       <div className="max-w-md flex-1">
         <label
           htmlFor="email"
-          className="block font-mono text-xs uppercase tracking-[0.16em] text-nieve/70"
+          className="block font-mono text-xs uppercase tracking-[0.16em] text-azul/80"
         >
           Lista de espera
         </label>
@@ -51,11 +51,11 @@ export function WaitlistForm() {
           type="email"
           autoComplete="email"
           placeholder="tu@email.com"
-          className="mt-2 w-full border-0 border-b border-nieve/40 bg-transparent py-2 font-mono text-sm text-nieve placeholder:text-nieve/40 focus:border-nieve focus:outline-none"
+          className="mt-2 w-full border-0 border-b border-azul/40 bg-transparent py-2 font-mono text-sm text-azul placeholder:text-azul/40 focus:border-azul focus:outline-none"
           {...register("email")}
         />
         {errors.email && (
-          <p className="mt-2 font-mono text-xs text-nieve/70">
+          <p className="mt-2 font-mono text-xs text-azul/80">
             {errors.email.message}
           </p>
         )}
@@ -73,7 +73,7 @@ export function WaitlistForm() {
       <button
         type="submit"
         disabled={isSubmitting}
-        className="bg-nieve px-7 py-3 text-xs font-semibold uppercase tracking-[0.17em] text-azul hover:bg-bruma disabled:opacity-70"
+        className="bg-azul px-7 py-3 text-xs font-semibold uppercase tracking-[0.17em] text-nieve hover:bg-noche disabled:opacity-70"
       >
         Anotarse
       </button>

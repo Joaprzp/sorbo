@@ -66,7 +66,7 @@ export const contribuir = action({
       } catch (e) {
         console.error("createOrder falló", e);
         await ctx.runMutation(internal.contributionsInternal.expirar, { id });
-        throw new Error("MP_FALLO");
+        throw new Error("MP_FALLO", { cause: e });
       }
       await ctx.runMutation(internal.contributionsInternal.vincularOrden, {
         id,

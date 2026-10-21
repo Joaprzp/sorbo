@@ -2,8 +2,7 @@ import { Link } from "@tanstack/react-router";
 
 const rows = [
   {
-    label: "Jujuy",
-    value: "La próxima Sorbo",
+    value: "El próximo Sorbo",
     href: "/jujuy",
   },
   {
@@ -25,25 +24,15 @@ const rows = [
 
 export function DataBlock() {
   return (
-    <dl className="border-t border-nieve/40">
+    <dl className="flex flex-wrap items-baseline justify-between gap-x-8 gap-y-3 font-mono text-[11px] uppercase tracking-[0.16em] text-azul/80 sm:text-xs">
       {rows.map((row) => (
-        <div
-          key={row.label}
-          className="flex items-baseline justify-between gap-6 py-3 font-mono text-[11px] uppercase tracking-[0.16em] text-nieve/70 sm:text-xs"
-        >
-          <dt>{row.label}</dt>
-          <dd>
+        <div key={row.value} className="flex items-baseline gap-3">
+          {"label" in row && <dt>{row.label}</dt>}
+          <dd className="text-azul">
             {row.href.startsWith("/") ? (
-              <Link to={row.href} className="hover:text-nieve">
-                {row.value}
-              </Link>
+              <Link to={row.href}>{row.value}</Link>
             ) : (
-              <a
-                href={row.href}
-                target="_blank"
-                rel="noreferrer"
-                className="hover:text-nieve"
-              >
+              <a href={row.href} target="_blank" rel="noreferrer">
                 {row.value}
               </a>
             )}

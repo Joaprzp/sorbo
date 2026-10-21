@@ -29,32 +29,59 @@ function Progreso() {
   if (p === undefined) return null;
   if (p === null) {
     return (
-      <p className="font-mono text-xs uppercase tracking-[0.16em] text-nieve/70">
+      <p className="font-mono text-xs uppercase tracking-[0.16em] text-azul/80">
         La campaña todavía no está configurada.
       </p>
     );
   }
+  const pct =
+    p.metaCentavos > 0
+      ? Math.round(
+          Math.min(100, (p.recaudadoNetoCentavos / p.metaCentavos) * 100),
+        )
+      : 0;
   return (
-    <dl className="border-t border-nieve/40 font-mono text-[11px] uppercase tracking-[0.16em] text-nieve/70 sm:text-xs">
-      <div className="flex items-baseline justify-between gap-6 py-3">
-        <dt>Meta</dt>
-        <dd className="text-nieve">{ars(p.metaCentavos)}</dd>
-      </div>
-      <div className="flex items-baseline justify-between gap-6 py-3">
-        <dt>Recaudado</dt>
-        <dd className="text-nieve">{ars(p.recaudadoNetoCentavos)}</dd>
-      </div>
-      <div className="flex items-baseline justify-between gap-6 py-3">
-        <dt>Aportes</dt>
-        <dd className="text-nieve">{p.contribuyentes}</dd>
-      </div>
-      {p.cumplida && (
+    <>
+      <dl className="border-t border-azul/40 font-mono text-[11px] uppercase tracking-[0.16em] text-azul/80 sm:text-xs">
         <div className="flex items-baseline justify-between gap-6 py-3">
-          <dt>Estado</dt>
-          <dd className="text-nieve">Meta cumplida</dd>
+          <dt>Meta</dt>
+          <dd className="text-azul">{ars(p.metaCentavos)}</dd>
         </div>
-      )}
-    </dl>
+        <div className="flex items-baseline justify-between gap-6 py-3">
+          <dt>Aportes</dt>
+          <dd className="text-azul">{p.contribuyentes}</dd>
+        </div>
+        {p.cumplida && (
+          <div className="flex items-baseline justify-between gap-6 py-3">
+            <dt>Estado</dt>
+            <dd className="text-azul">Meta cumplida</dd>
+          </div>
+        )}
+      </dl>
+      <div className="mt-3">
+        <div className="flex items-baseline justify-between gap-6 pb-2 font-mono text-[11px] uppercase tracking-[0.16em] text-azul/80 sm:text-xs">
+          <span id="label-recaudado">Recaudado</span>
+          <span className="text-azul">{pct}%</span>
+        </div>
+        <div
+          role="progressbar"
+          aria-labelledby="label-recaudado"
+          aria-valuenow={Math.min(p.recaudadoNetoCentavos, p.metaCentavos)}
+          aria-valuemin={0}
+          aria-valuemax={p.metaCentavos}
+          className="h-9 overflow-hidden border border-azul/40"
+        >
+          <div
+            className="flex h-full items-center bg-azul"
+            style={{ width: `${pct}%`, minWidth: "max-content" }}
+          >
+            <span className="px-3 font-mono text-[11px] tracking-[0.12em] text-nieve">
+              {ars(p.recaudadoNetoCentavos)}
+            </span>
+          </div>
+        </div>
+      </div>
+    </>
   );
 }
 
@@ -70,7 +97,12 @@ function FormMp({ sugeridos, min }: { sugeridos: number[]; min: number }) {
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (website) return;
-    const pesos = libre.trim() ? Number(libre.replace(/\D/g, "")) : monto / 100;
+    const crudo = libre.replace(/[^\d,]/g, "").replace(",", ".");
+    const pesos = libre.trim() ? Number(crudo) : monto / 100;
+    if (!Number.isFinite(pesos) || pesos * 100 < min) {
+      setError(`El mínimo es ${ars(min)}.`);
+      return;
+    }
     setEnviando(true);
     setError(null);
     try {
@@ -92,8 +124,8 @@ function FormMp({ sugeridos, min }: { sugeridos: number[]; min: number }) {
   return (
     <form onSubmit={onSubmit} className="flex flex-col gap-6">
       <fieldset>
-        <legend className="font-mono text-xs uppercase tracking-[0.16em] text-nieve/70">
-          Aportá con Mercado Pago
+        <legend className="font-mono text-xs uppercase tracking-[0.16em] text-azul/80">
+          Mercado Pago
         </legend>
         <div className="mt-4 flex flex-wrap gap-2">
           {sugeridos.map((c) => (
@@ -106,8 +138,8 @@ function FormMp({ sugeridos, min }: { sugeridos: number[]; min: number }) {
               }}
               className={`border px-4 py-2 font-mono text-xs uppercase tracking-[0.14em] ${
                 !libre && monto === c
-                  ? "border-nieve bg-nieve text-azul"
-                  : "border-nieve/40 text-nieve/80 hover:border-nieve"
+                  ? "border-azul bg-azul text-nieve"
+                  : "border-azul/40 text-azul/80 hover:border-azul"
               }`}
             >
               {ars(c)}
@@ -118,7 +150,7 @@ function FormMp({ sugeridos, min }: { sugeridos: number[]; min: number }) {
             placeholder="Otro monto"
             value={libre}
             onChange={(e) => setLibre(e.target.value)}
-            className="w-36 border border-nieve/40 bg-transparent px-4 py-2 font-mono text-xs uppercase tracking-[0.14em] text-nieve placeholder:text-nieve/40 focus:border-nieve focus:outline-none"
+            className="w-36 border border-azul/40 bg-transparent px-4 py-2 font-mono text-xs uppercase tracking-[0.14em] text-azul placeholder:text-azul/40 focus:border-azul focus:outline-none"
           />
         </div>
       </fieldset>
@@ -126,7 +158,7 @@ function FormMp({ sugeridos, min }: { sugeridos: number[]; min: number }) {
       <div className="max-w-md">
         <label
           htmlFor="email-aporte"
-          className="block font-mono text-xs uppercase tracking-[0.16em] text-nieve/70"
+          className="block font-mono text-xs uppercase tracking-[0.16em] text-azul/80"
         >
           Email (opcional)
         </label>
@@ -137,10 +169,11 @@ function FormMp({ sugeridos, min }: { sugeridos: number[]; min: number }) {
           placeholder="tu@email.com"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          className="mt-2 w-full border-0 border-b border-nieve/40 bg-transparent py-2 font-mono text-sm text-nieve placeholder:text-nieve/40 focus:border-nieve focus:outline-none"
+          className="mt-2 w-full border-0 border-b border-azul/40 bg-transparent py-2 font-mono text-sm text-azul placeholder:text-azul/40 focus:border-azul focus:outline-none"
         />
-        <p className="mt-2 font-mono text-[11px] uppercase tracking-[0.14em] text-nieve/50">
-          Te avisamos cuando acredita, si vuelve, y si se cumple la meta.
+        <p className="mt-2 font-mono text-[11px] uppercase tracking-[0.14em] text-azul/70">
+          Te avisamos cuando acredita, si vuelve y si se cumple la meta. Nada
+          de spam.
         </p>
       </div>
 
@@ -158,16 +191,19 @@ function FormMp({ sugeridos, min }: { sugeridos: number[]; min: number }) {
         <button
           type="submit"
           disabled={enviando}
-          className="bg-nieve px-7 py-3 text-xs font-semibold uppercase tracking-[0.17em] text-azul hover:bg-bruma disabled:opacity-70"
+          className="bg-azul px-7 py-3 text-xs font-semibold uppercase tracking-[0.17em] text-nieve hover:bg-noche disabled:opacity-70"
         >
           Contribuir
         </button>
-        <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-nieve/50">
+        <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-azul/70">
           Mínimo {ars(min)} · Efectivo suma al acreditarse
         </p>
       </div>
       {error && (
-        <p className="font-mono text-xs uppercase tracking-[0.14em] text-nieve">
+        <p
+          role="alert"
+          className="font-mono text-xs uppercase tracking-[0.14em] text-azul"
+        >
           {error}
         </p>
       )}
@@ -220,28 +256,29 @@ function BloqueCrypto({
 
   return (
     <section className="flex flex-col gap-5">
-      <p className="font-mono text-xs uppercase tracking-[0.16em] text-nieve/70">
-        O en cripto
+      <p className="font-mono text-xs uppercase tracking-[0.16em] text-azul/80">
+        Cripto
       </p>
-      <p className="font-mono text-[11px] uppercase leading-relaxed tracking-[0.14em] text-nieve/70">
-        USDC o USDT · Base o Polygon · Mínimo {crypto.minUsdCents / 100}
-        <br />
+      <p className="font-mono text-[11px] uppercase leading-relaxed tracking-[0.14em] text-azul/80">
+        USDC o USDT · Base o Polygon · Mínimo {crypto.minUsdCents / 100} USD
+      </p>
+      <p className="font-mono text-[11px] uppercase leading-relaxed tracking-[0.14em] text-alerta">
         No hay devolución en cripto.
       </p>
       <div className="flex flex-wrap items-start gap-8">
         <div
-          className="w-32 shrink-0 bg-nieve p-2 [&_svg]:block [&_svg]:size-full [&_svg_path]:fill-azul"
+          className="w-32 shrink-0 border border-azul/40 bg-nieve p-2 [&_svg]:block [&_svg]:size-full [&_svg_path]:fill-azul"
           dangerouslySetInnerHTML={{ __html: qr }}
         />
         <div className="min-w-0 flex-1">
           <button
             type="button"
             onClick={copiar}
-            className="break-all text-left font-mono text-[11px] uppercase tracking-[0.14em] text-nieve underline-offset-4 hover:underline sm:text-xs"
+            className="break-all text-left font-mono text-[11px] uppercase tracking-[0.14em] text-azul underline-offset-4 hover:underline sm:text-xs"
           >
             {crypto.address}
           </button>
-          <p className="mt-3 font-mono text-[11px] uppercase tracking-[0.14em] text-nieve/50">
+          <p className="mt-3 font-mono text-[11px] uppercase tracking-[0.14em] text-azul/70">
             {copiado ? "Copiado." : "Tocá para copiar."}
           </p>
         </div>
@@ -249,7 +286,7 @@ function BloqueCrypto({
       <form onSubmit={avisar} className="flex max-w-md flex-col gap-4">
         <label
           htmlFor="tx-hash"
-          className="font-mono text-[11px] uppercase tracking-[0.14em] text-nieve/50"
+          className="font-mono text-[11px] uppercase tracking-[0.14em] text-azul/70"
         >
           ¿Ya mandaste? Pegá tu tx hash y lo seguimos
         </label>
@@ -258,7 +295,7 @@ function BloqueCrypto({
           value={txHash}
           onChange={(e) => setTxHash(e.target.value)}
           placeholder="0x…"
-          className="w-full border-0 border-b border-nieve/40 bg-transparent py-2 font-mono text-sm text-nieve placeholder:text-nieve/40 focus:border-nieve focus:outline-none"
+          className="w-full border-0 border-b border-azul/40 bg-transparent py-2 font-mono text-sm text-azul placeholder:text-azul/40 focus:border-azul focus:outline-none"
         />
         <div className="flex flex-wrap items-center gap-2">
           {crypto.chains.map((c) => (
@@ -268,8 +305,8 @@ function BloqueCrypto({
               onClick={() => setChain(c)}
               className={`border px-3 py-1.5 font-mono text-[11px] uppercase tracking-[0.14em] ${
                 chain === c
-                  ? "border-nieve bg-nieve text-azul"
-                  : "border-nieve/40 text-nieve/80 hover:border-nieve"
+                  ? "border-azul bg-azul text-nieve"
+                  : "border-azul/40 text-azul/80 hover:border-azul"
               }`}
             >
               {c}
@@ -280,18 +317,21 @@ function BloqueCrypto({
             placeholder="Email (opcional)"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="min-w-40 flex-1 border-0 border-b border-nieve/40 bg-transparent py-2 font-mono text-sm text-nieve placeholder:text-nieve/40 focus:border-nieve focus:outline-none"
+            className="min-w-40 flex-1 border-0 border-b border-azul/40 bg-transparent py-2 font-mono text-sm text-azul placeholder:text-azul/40 focus:border-azul focus:outline-none"
           />
           <button
             type="submit"
             disabled={enviando}
-            className="border border-nieve px-4 py-2 font-mono text-[11px] uppercase tracking-[0.14em] text-nieve hover:bg-nieve hover:text-azul disabled:opacity-70"
+            className="border border-azul px-4 py-2 font-mono text-[11px] uppercase tracking-[0.14em] text-azul hover:bg-azul hover:text-nieve disabled:opacity-70"
           >
             Avisar
           </button>
         </div>
         {error && (
-          <p className="font-mono text-xs uppercase tracking-[0.14em] text-nieve">
+          <p
+            role="alert"
+            className="font-mono text-xs uppercase tracking-[0.14em] text-azul"
+          >
             {error}
           </p>
         )}
@@ -303,7 +343,7 @@ function BloqueCrypto({
 export function Jujuy() {
   const p = useQuery(api.campaigns.progreso, { slug: "jujuy" });
   return (
-    <Pieza lado="Salta → Jujuy">
+    <Pieza lado="Salta → Jujuy" doe={false}>
       <section className="py-10">
         <h1 className="text-[clamp(2rem,8vw,6.5rem)] font-bold uppercase leading-[0.98]">
           El próximo
@@ -315,18 +355,21 @@ export function Jujuy() {
           <br />
           Si tu aporte cumple 89 días y la meta no se cumplió,
           <br />
-          lo devolvemos solo.
+          vuelve solo.
         </p>
       </section>
 
       <Progreso />
 
-      <section className="mt-10 flex flex-col gap-12">
+      <section className="mt-10">
         {p?.rails.mp && (
           <FormMp
             sugeridos={p.sugeridosCentavos}
             min={p.minMpCentavos}
           />
+        )}
+        {p?.rails.mp && p?.rails.crypto && (
+          <hr className="my-12 border-0 border-t border-azul/40" />
         )}
         {p?.rails.crypto && <BloqueCrypto crypto={p.rails.crypto} />}
       </section>
