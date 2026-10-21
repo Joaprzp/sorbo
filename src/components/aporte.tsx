@@ -19,7 +19,7 @@ function Estado({ token }: { token: string }) {
 
   if (s === undefined) {
     return (
-      <div role="status" aria-label="Cargando el estado del aporte">
+      <div role="status">
         <div aria-hidden="true">
           <div className="h-[clamp(2rem,8vw,6.5rem)] w-3/4 max-w-lg bg-azul/10" />
           <div className="mt-8 flex flex-col gap-3">

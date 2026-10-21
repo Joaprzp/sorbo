@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useAction, useQuery } from "convex/react";
+import type { FunctionReturnType } from "convex/server";
 import { useNavigate } from "@tanstack/react-router";
 import { encodeQR } from "qr";
 import { api } from "../../convex/_generated/api";
@@ -24,9 +25,11 @@ function mensajeError(e: unknown): string {
   return "No pudimos tomar el aporte. Probá de nuevo.";
 }
 
-function Progreso() {
-  const p = useQuery(api.campaigns.progreso, { slug: "jujuy" });
-  if (p === undefined) return null;
+type ProgresoData = NonNullable<
+  FunctionReturnType<typeof api.campaigns.progreso>
+>;
+
+function Progreso({ p }: { p: ProgresoData | null }) {
   if (p === null) {
     return (
       <p className="font-mono text-xs uppercase tracking-[0.16em] text-azul/80">
@@ -92,7 +95,7 @@ function Fantasma({ className = "" }: { className?: string }) {
 
 function EsqueletoProgreso() {
   return (
-    <div role="status" aria-label="Cargando la campaña">
+    <div role="status">
       <div className="border-t border-azul/40 font-mono text-[11px] uppercase tracking-[0.16em] text-azul/80 sm:text-xs">
         <div className="flex items-baseline justify-between gap-6 py-3">
           <span>Meta</span>
@@ -262,6 +265,7 @@ function BloqueCrypto({
   const [chain, setChain] = useState(crypto.chains[0] ?? "base");
   const [txHash, setTxHash] = useState("");
   const [email, setEmail] = useState("");
+  const [website, setWebsite] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
 
@@ -273,11 +277,13 @@ function BloqueCrypto({
 
   const avisar = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (website) return;
     setEnviando(true);
     setError(null);
     try {
       const r = await contribuir({
         slug: "jujuy",
+        website,
         via: {
           rail: "crypto",
           chainId: chain,
@@ -324,6 +330,15 @@ function BloqueCrypto({
         </div>
       </div>
       <form onSubmit={avisar} className="flex max-w-md flex-col gap-4">
+        <input
+          type="text"
+          tabIndex={-1}
+          autoComplete="off"
+          aria-hidden="true"
+          className="hidden"
+          value={website}
+          onChange={(e) => setWebsite(e.target.value)}
+        />
         <label
           htmlFor="tx-hash"
           className="font-mono text-[11px] uppercase tracking-[0.14em] text-azul/80"
@@ -409,7 +424,7 @@ export function Jujuy() {
         <EsqueletoProgreso />
       ) : (
         <>
-          <Progreso />
+          <Progreso p={p} />
           <section className="mt-10">
             {p?.rails.mp && (
               <FormMp

@@ -51,7 +51,11 @@ export interface FxPort {
 export type MailKind = "acreditacion" | "devolucion" | "meta_cumplida";
 
 export interface MailPort {
-  send(kind: MailKind, to: string, data: Record<string, string>): Promise<void>;
+  send(
+    kind: MailKind,
+    to: string,
+    data: { montoCentavos?: number },
+  ): Promise<void>;
 }
 
 export interface Ports {

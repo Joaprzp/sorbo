@@ -651,7 +651,7 @@ export const enviarNotificacion = internalAction({
     });
     if (!c?.email) return;
     await ports.mail.send(args.kind, c.email, {
-      monto: String(c.aporteCentavos ?? c.montoCentavos ?? 0),
+      montoCentavos: c.aporteCentavos ?? c.montoCentavos,
     });
   },
 });
