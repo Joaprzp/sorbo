@@ -35,6 +35,7 @@ bun run typecheck   # tsc --noEmit (TypeScript 7 nativo)
 bun run build       # vite build
 bun run audit       # bun audit — vulns en deps
 bun run knip        # dead files/exports/deps
+bun run test        # vitest + convex-test — lógica de contribuciones
 ```
 
 Auditorías ad-hoc: `bunx fallow` (complejidad, duplicación, dead code),

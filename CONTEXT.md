@@ -58,6 +58,21 @@ Lotes, pruebas, recetas y documentos internos. Con guion («LAB-001»). Sólo se
 **Lista de espera**:
 El mecanismo de registro previo a la apertura del local. Quien se anota recibe aviso cuando Sorbo abre o cuando hay un SESSION. En la landing es el cierre de la pieza y la única acción del visitante.
 
+**Campaña**:
+La recaudación abierta para financiar una sucursal nueva. La primera y única definida hoy es la de Jujuy; cada ciudad futura tendría su propia campaña y su propia pieza. No tiene fecha de cierre: queda abierta hasta llegar a la meta.
+
+**Contribución**:
+Un aporte de dinero real a la campaña. Puede ser anónima o llevar el email del contribuyente; nunca lleva recompensa a cambio. Pasa por estados según el cobro: pendiente (promesa o pago diferido), expirada (el intento de cobro murió sin dinero — un pago tardío verificado igual acredita), aprobada (dinero acreditado — la única que suma a la meta) y devuelta. Dos caminos de cobro: Mercado Pago (dinero en cuenta en pesos) y cripto (USDC/USDT en Base o Polygon — una sola address EVM — contado a cotización MEP del momento de la acreditación). Mínimo equivalente a un latte: 5.000 ARS o 5 USDC; lo que llega por debajo o por una red no soportada no cuenta.
+
+**Devolución automática**:
+La promesa de la campaña: si una contribución aprobada cumple 89 días y la meta todavía no se completó, ese dinero vuelve solo. Cada contribución corre su propio reloj desde la acreditación; lo devuelto se descuenta del recaudado. Una vez cumplida la meta, no hay más devoluciones. Excepción declarada: las contribuciones en cripto no tienen devolución — la pieza lo dice antes del QR.
+
+**Meta**:
+El objetivo bruto en pesos de la campaña, elegido ya descontando el costo del cobro. Se muestra públicamente junto al recaudado y al número de contribuyentes. Completarla es un latch: una vez cumplida, la campaña se considera cumplida para siempre.
+
+**Contribuyente**:
+Quien hace una contribución. Anónimo por defecto; si deja su email recibe novedades de la campaña — acreditación, devolución, meta cumplida. Distinto de la lista de espera: son intenciones distintas y no se mezclan.
+
 ### Voz
 
 **Especialidad sin careta**:

@@ -1,4 +1,11 @@
+import { Link } from "@tanstack/react-router";
+
 const rows = [
+  {
+    label: "Jujuy",
+    value: "La próxima Sorbo",
+    href: "/jujuy",
+  },
   {
     label: "Dirección",
     value: "Dean Funes 244, Salta",
@@ -26,14 +33,20 @@ export function DataBlock() {
         >
           <dt>{row.label}</dt>
           <dd>
-            <a
-              href={row.href}
-              target="_blank"
-              rel="noreferrer"
-              className="hover:text-nieve"
-            >
-              {row.value}
-            </a>
+            {row.href.startsWith("/") ? (
+              <Link to={row.href} className="hover:text-nieve">
+                {row.value}
+              </Link>
+            ) : (
+              <a
+                href={row.href}
+                target="_blank"
+                rel="noreferrer"
+                className="hover:text-nieve"
+              >
+                {row.value}
+              </a>
+            )}
           </dd>
         </div>
       ))}

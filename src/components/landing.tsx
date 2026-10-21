@@ -1,18 +1,10 @@
-import { Doe } from "./doe";
 import { WaitlistForm } from "./waitlist-form";
 import { DataBlock } from "./data-block";
+import { Pieza } from "./pieza";
 
 export function Landing() {
   return (
-    <main className="flex min-h-dvh flex-col bg-azul px-[9vw] pb-[6vh] pt-[8vh] font-sans text-nieve">
-      <header>
-        <div className="flex items-baseline justify-between text-xs font-semibold uppercase tracking-[0.24em] text-nieve/70 sm:text-sm">
-          <span>Sorbo</span>
-          <span>Salta · AR</span>
-        </div>
-        <hr className="mt-4 border-0 border-t border-nieve/40" />
-      </header>
-
+    <Pieza lado="Salta · AR" abajo={<DataBlock />}>
       <section className="flex flex-1 flex-col justify-center py-8">
         <h1 className="text-[clamp(2rem,9.5vw,8rem)] font-bold uppercase leading-[0.98]">
           Estamos
@@ -27,11 +19,6 @@ export function Landing() {
       </section>
 
       <WaitlistForm />
-
-      <footer className="mt-8">
-        <Doe className="-mb-px h-[clamp(90px,13vh,140px)] w-auto text-nieve" />
-        <DataBlock />
-      </footer>
-    </main>
+    </Pieza>
   );
 }
