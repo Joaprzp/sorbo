@@ -62,15 +62,17 @@ export interface MailPort {
 
 // Push al cel del admin (brrr). Distinto del mail transaccional: esto es
 // operación interna, no comunicación con el contribuyente.
+export type PushAviso = {
+  title: string;
+  message: string;
+  threadId?: string;
+  sound?: string;
+  openUrl?: string;
+  interruptionLevel?: "active" | "time-sensitive";
+};
+
 export interface PushPort {
-  push(aviso: {
-    title: string;
-    message: string;
-    threadId?: string;
-    sound?: string;
-    openUrl?: string;
-    interruptionLevel?: "active" | "time-sensitive";
-  }): Promise<void>;
+  push(aviso: PushAviso): Promise<void>;
 }
 
 export interface Ports {
@@ -96,6 +98,7 @@ export function resolvePorts(): Ports {
   return {
     mp: mpToken ? new MpOrdersHttp(mpToken) : null,
     evm: indexerKey ? new EvmIndexerHttp(indexerKey) : null,
+    // Sin indexer no hay rail cripto y el FX no se usa para nada más.
     fx: indexerKey ? new FxHttp() : null,
     mail: resendKey ? new ResendHttp(resendKey) : null,
     push: brrrKey ? new BrrrHttp(brrrKey) : null,

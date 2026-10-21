@@ -11,6 +11,7 @@ import type {
   MailPort,
   MailKind,
   PushPort,
+  PushAviso,
 } from "./ports";
 import { ANTIGUEDAD_MAX_BLOQUES, TOKEN_CONTRACTS } from "./dominio";
 import { MAIL_SUBJECTS, mailHtml, mailText } from "./mailPlantillas";
@@ -293,14 +294,7 @@ export class ResendHttp implements MailPort {
 export class BrrrHttp implements PushPort {
   constructor(private key: string) {}
 
-  async push(aviso: {
-    title: string;
-    message: string;
-    threadId?: string;
-    sound?: string;
-    openUrl?: string;
-    interruptionLevel?: "active" | "time-sensitive";
-  }) {
+  async push(aviso: PushAviso) {
     const res = await fetch("https://api.brrr.now/v1/send", {
       method: "POST",
       headers: {

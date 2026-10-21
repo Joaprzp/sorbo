@@ -5,7 +5,7 @@ import type { DataModel, Id } from "./_generated/dataModel";
 import { internal } from "./_generated/api";
 import { resolvePorts } from "./_lib/ports";
 import { ordenAcreditada, decisionExpiracion } from "./_lib/mpChecks";
-import { esTransferValida, centavosPorUsd } from "./_lib/evmChecks";
+import { esTransferValida, esContratoSoportado, centavosPorUsd } from "./_lib/evmChecks";
 import { CHAINS_SOPORTADAS, MIN_USD_CENTS, TECHO_AVISO_USD_CENTS } from "./_lib/dominio";
 import { ars } from "../src/lib/format";
 
@@ -164,14 +164,14 @@ export const anunciarMetaCumplida = internalAction({
   args: { campaniaId: v.id("campaigns"), metaCentavos: v.optional(v.number()) },
   handler: async (ctx, { campaniaId, metaCentavos }) => {
     const ports = resolvePorts();
-    const emails = ports.mail
-      ? await ctx.runQuery(
-          internal.contributionsInternal.contribuyentesConEmail,
-          { campaniaId },
-        )
-      : [];
-    for (const to of emails) {
-      await ports.mail!.send("meta_cumplida", to, {});
+    if (ports.mail) {
+      const emails = await ctx.runQuery(
+        internal.contributionsInternal.contribuyentesConEmail,
+        { campaniaId },
+      );
+      for (const to of emails) {
+        await ports.mail.send("meta_cumplida", to, {});
+      }
     }
     if (metaCentavos !== undefined) {
       try {
@@ -330,7 +330,7 @@ export const marcarReembolsoFallido = internalMutation({
   args: { id: v.id("contribuciones"), error: v.string() },
   handler: async (ctx, { id, error }) => {
     const c = await ctx.db.get(id);
-    if (!c) return;
+    if (!c || c.refundEstado === "done") return;
     await ctx.db.patch(id, { refundEstado: "failed", refundError: error });
     await ctx.scheduler.runAfter(0, internal.contributionsInternal.avisarAdmin, {
       kind: "reembolso_fallido",
@@ -587,11 +587,19 @@ export const escanearCrypto = internalAction({
     const avisarRechazo = async (tx: import("./_lib/ports").EvmTransfer) => {
       if (avisosRechazo >= 5) return;
       if (tx.usdCents < MIN_USD_CENTS || tx.usdCents > TECHO_AVISO_USD_CENTS) return;
+      const clave = `rechazo:${tx.chain}:${tx.txHash}`;
+      // El budget de la corrida solo lo consumen claves frescas: un spam ya
+      // dedupeado no puede tapar el aviso de una transfer nueva.
+      const ya = await ctx.runQuery(
+        internal.contributionsInternal.avisoEnviado,
+        { clave },
+      );
+      if (ya) return;
       avisosRechazo++;
       await ctx.scheduler.runAfter(0, internal.contributionsInternal.avisarAdmin, {
         kind: "cripto_rechazada",
         detalle: `${tx.chain} · ${tx.asset} · USD ${(tx.usdCents / 100).toFixed(2)} · ${tx.txHash.slice(0, 12)}…`,
-        clave: `rechazo:${tx.chain}:${tx.txHash}`,
+        clave,
       });
     };
     for (const chain of CHAINS_SOPORTADAS) {
@@ -636,7 +644,8 @@ export const escanearCrypto = internalAction({
         do {
           const res = await ports.evm.inboundTransfers(address, chain, cursor);
           for (const tx of res.transfers) {
-            if (esTransferValida(tx, address)) continue; // ya la manejó el feed de acreditación
+            // Contrato soportado → el feed de acreditación ya la procesó.
+            if (esContratoSoportado(chain, tx.contract)) continue;
             await avisarRechazo(tx);
           }
           cursor = res.cursor;

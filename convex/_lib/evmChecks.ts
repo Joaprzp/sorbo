@@ -7,13 +7,18 @@ import {
   ANTIGUEDAD_MAX_BLOQUES,
 } from "./dominio";
 
+// El contrato es la identidad del token; el símbolo que reporta el
+// indexer es ruido (USDT0 puede llegar como USDT, USDt, etc.).
+export function esContratoSoportado(chain: string, contract: string): boolean {
+  return Object.values(TOKEN_CONTRACTS[chain] ?? {}).some(
+    (c) => c.address === contract.toLowerCase(),
+  );
+}
+
 export function esTransferValida(
   tx: EvmTransfer,
   address: string,
 ): boolean {
-  // El contrato es la identidad del token; el símbolo que reporta el
-  // indexer es ruido (USDT0 puede llegar como USDT, USDt, etc.).
-  const contratos = Object.values(TOKEN_CONTRACTS[tx.chain] ?? {});
   if (
     CHAINS_SOPORTADAS.includes(tx.chain) &&
     ANTIGUEDAD_MAX_BLOQUES[tx.chain] === undefined
@@ -22,7 +27,7 @@ export function esTransferValida(
   }
   return (
     CHAINS_SOPORTADAS.includes(tx.chain) &&
-    contratos.some((c) => c.address === tx.contract.toLowerCase()) &&
+    esContratoSoportado(tx.chain, tx.contract) &&
     tx.to.toLowerCase() === address.toLowerCase() &&
     tx.usdCents >= MIN_USD_CENTS &&
     tx.confirmations >= MIN_CONFIRMACIONES &&
