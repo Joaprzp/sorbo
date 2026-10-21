@@ -86,6 +86,42 @@ function Progreso() {
   );
 }
 
+function Fantasma({ className = "" }: { className?: string }) {
+  return <span aria-hidden="true" className={`inline-block bg-azul/10 ${className}`} />;
+}
+
+function EsqueletoProgreso() {
+  return (
+    <div role="status" aria-label="Cargando la campaña">
+      <div className="border-t border-azul/40 font-mono text-[11px] uppercase tracking-[0.16em] text-azul/80 sm:text-xs">
+        <div className="flex items-baseline justify-between gap-6 py-3">
+          <span>Meta</span>
+          <Fantasma className="h-3 w-24" />
+        </div>
+        <div className="flex items-baseline justify-between gap-6 py-3">
+          <span>Aportes</span>
+          <Fantasma className="h-3 w-10" />
+        </div>
+      </div>
+      <div className="mt-3">
+        <div className="flex items-baseline justify-between gap-6 pb-2 font-mono text-[11px] uppercase tracking-[0.16em] text-azul/80 sm:text-xs">
+          <span>Recaudado</span>
+          <Fantasma className="h-3 w-8" />
+        </div>
+        <div className="h-9 border border-azul/40" />
+      </div>
+      <hr className="my-12 border-0 border-t border-azul/40" />
+      <div className="flex flex-wrap gap-2">
+        <Fantasma className="h-9 w-24" />
+        <Fantasma className="h-9 w-24" />
+        <Fantasma className="h-9 w-24" />
+        <Fantasma className="h-9 w-36" />
+      </div>
+      <span className="sr-only">Cargando</span>
+    </div>
+  );
+}
+
 function FormMp({ sugeridos, min }: { sugeridos: number[]; min: number }) {
   const contribuir = useAction(api.contributions.contribuir);
   const [monto, setMonto] = useState<number>(sugeridos[0] ?? min);
@@ -369,20 +405,25 @@ export function Jujuy() {
         </p>
       </section>
 
-      <Progreso />
-
-      <section className="mt-10">
-        {p?.rails.mp && (
-          <FormMp
-            sugeridos={p.sugeridosCentavos}
-            min={p.minMpCentavos}
-          />
-        )}
-        {p?.rails.mp && p?.rails.crypto && (
-          <hr className="my-12 border-0 border-t border-azul/40" />
-        )}
-        {p?.rails.crypto && <BloqueCrypto crypto={p.rails.crypto} />}
-      </section>
+      {p === undefined ? (
+        <EsqueletoProgreso />
+      ) : (
+        <>
+          <Progreso />
+          <section className="mt-10">
+            {p?.rails.mp && (
+              <FormMp
+                sugeridos={p.sugeridosCentavos}
+                min={p.minMpCentavos}
+              />
+            )}
+            {p?.rails.mp && p?.rails.crypto && (
+              <hr className="my-12 border-0 border-t border-azul/40" />
+            )}
+            {p?.rails.crypto && <BloqueCrypto crypto={p.rails.crypto} />}
+          </section>
+        </>
+      )}
     </Pieza>
   );
 }
