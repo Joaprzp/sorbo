@@ -55,7 +55,7 @@ export function WaitlistForm() {
           {...register("email")}
         />
         {errors.email && (
-          <p className="mt-2 font-mono text-xs text-azul/80">
+          <p role="alert" className="mt-2 font-mono text-xs text-azul">
             {errors.email.message}
           </p>
         )}

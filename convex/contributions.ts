@@ -76,7 +76,11 @@ export const contribuir = action({
         });
       } catch (e) {
         console.error("vincularOrden falló", e);
-        await ports.mp.cancelOrder(order.id).catch(() => {});
+        try {
+          await ports.mp.cancelOrder(order.id);
+        } catch (e2) {
+          console.error("cancelOrder falló — orden huérfana pagable", e2);
+        }
         await ctx.runMutation(internal.contributionsInternal.expirar, { id });
         throw new Error("MP_FALLO", { cause: e });
       }

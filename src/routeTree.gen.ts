@@ -11,7 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as JujuyRouteImport } from './routes/jujuy'
-import { Route as JujuyAporteRouteImport } from './routes/jujuy.aporte'
+import { Route as JujuyAporteRouteImport } from './routes/jujuy_.aporte'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -24,38 +24,39 @@ const JujuyRoute = JujuyRouteImport.update({
   getParentRoute: () => rootRouteImport,
 } as any)
 const JujuyAporteRoute = JujuyAporteRouteImport.update({
-  id: '/aporte',
-  path: '/aporte',
-  getParentRoute: () => JujuyRoute,
+  id: '/jujuy_/aporte',
+  path: '/jujuy/aporte',
+  getParentRoute: () => rootRouteImport,
 } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/jujuy': typeof JujuyRouteWithChildren
+  '/jujuy': typeof JujuyRoute
   '/jujuy/aporte': typeof JujuyAporteRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/jujuy': typeof JujuyRouteWithChildren
+  '/jujuy': typeof JujuyRoute
   '/jujuy/aporte': typeof JujuyAporteRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/jujuy': typeof JujuyRouteWithChildren
-  '/jujuy/aporte': typeof JujuyAporteRoute
+  '/jujuy': typeof JujuyRoute
+  '/jujuy_/aporte': typeof JujuyAporteRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths: '/' | '/jujuy' | '/jujuy/aporte'
   fileRoutesByTo: FileRoutesByTo
   to: '/' | '/jujuy' | '/jujuy/aporte'
-  id: '__root__' | '/' | '/jujuy' | '/jujuy/aporte'
+  id: '__root__' | '/' | '/jujuy' | '/jujuy_/aporte'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  JujuyRoute: typeof JujuyRouteWithChildren
+  JujuyRoute: typeof JujuyRoute
+  JujuyAporteRoute: typeof JujuyAporteRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -74,29 +75,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof JujuyRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/jujuy/aporte': {
-      id: '/jujuy/aporte'
-      path: '/aporte'
+    '/jujuy_/aporte': {
+      id: '/jujuy_/aporte'
+      path: '/jujuy/aporte'
       fullPath: '/jujuy/aporte'
       preLoaderRoute: typeof JujuyAporteRouteImport
-      parentRoute: typeof JujuyRoute
+      parentRoute: typeof rootRouteImport
     }
   }
 }
 
-interface JujuyRouteChildren {
-  JujuyAporteRoute: typeof JujuyAporteRoute
-}
-
-const JujuyRouteChildren: JujuyRouteChildren = {
-  JujuyAporteRoute: JujuyAporteRoute,
-}
-
-const JujuyRouteWithChildren = JujuyRoute._addFileChildren(JujuyRouteChildren)
-
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  JujuyRoute: JujuyRouteWithChildren,
+  JujuyRoute: JujuyRoute,
+  JujuyAporteRoute: JujuyAporteRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

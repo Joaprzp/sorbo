@@ -17,3 +17,4 @@ convex/_generated/
 # Wrangler / Cloudflare local
 .wrangler/
 .dev.vars
+.tanstack/

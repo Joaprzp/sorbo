@@ -24,11 +24,11 @@ const rows = [
 
 export function DataBlock() {
   return (
-    <dl className="flex flex-wrap items-baseline justify-between gap-x-8 gap-y-3 font-mono text-[11px] uppercase tracking-[0.16em] text-azul/80 sm:text-xs">
+    <ul className="flex flex-wrap items-baseline justify-between gap-x-8 gap-y-3 font-mono text-[11px] uppercase tracking-[0.16em] text-azul/80 sm:text-xs">
       {rows.map((row) => (
-        <div key={row.value} className="flex items-baseline gap-3">
-          {"label" in row && <dt>{row.label}</dt>}
-          <dd className="text-azul">
+        <li key={row.value} className="flex items-baseline gap-3">
+          {"label" in row && <span>{row.label}</span>}
+          <span className="text-azul">
             {row.href.startsWith("/") ? (
               <Link to={row.href}>{row.value}</Link>
             ) : (
@@ -36,9 +36,9 @@ export function DataBlock() {
                 {row.value}
               </a>
             )}
-          </dd>
-        </div>
+          </span>
+        </li>
       ))}
-    </dl>
+    </ul>
   );
 }

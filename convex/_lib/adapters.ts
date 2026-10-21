@@ -93,11 +93,12 @@ export class MpOrdersHttp implements MpPort {
   }
 
   async cancelOrder(id: string): Promise<void> {
-    await this.req(`/v1/orders/${id}/cancel`, {
+    const { status } = await this.req(`/v1/orders/${id}/cancel`, {
       method: "POST",
       headers: { "X-Idempotency-Key": `cancel-${id}` },
       body: "{}",
     });
+    if (status >= 400) throw new Error(`MP_CANCEL_ORDER:${status}`);
   }
 
   async refundOrder(id: string, idempotencyKey: string): Promise<MpRefundResult> {

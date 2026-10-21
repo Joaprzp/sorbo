@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { Aporte } from "../components/aporte";
 
-export const Route = createFileRoute("/jujuy/aporte")({
+export const Route = createFileRoute("/jujuy_/aporte")({
   validateSearch: (search: Record<string, unknown>) => ({
     t: typeof search.t === "string" ? search.t : "",
   }),

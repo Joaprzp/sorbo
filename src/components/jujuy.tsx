@@ -69,6 +69,7 @@ function Progreso() {
           aria-valuenow={Math.min(p.recaudadoNetoCentavos, p.metaCentavos)}
           aria-valuemin={0}
           aria-valuemax={p.metaCentavos}
+          aria-valuetext={`${pct}% — ${ars(p.recaudadoNetoCentavos)} de ${ars(p.metaCentavos)}`}
           className="h-9 overflow-hidden border border-azul/40"
         >
           <div
@@ -99,7 +100,8 @@ function FormMp({ sugeridos, min }: { sugeridos: number[]; min: number }) {
     if (website) return;
     const crudo = libre.replace(/[^\d,]/g, "").replace(",", ".");
     const pesos = libre.trim() ? Number(crudo) : monto / 100;
-    if (!Number.isFinite(pesos) || pesos * 100 < min) {
+    const centavos = Math.round(pesos * 100);
+    if (!Number.isFinite(pesos) || centavos < min) {
       setError(`El mínimo es ${ars(min)}.`);
       return;
     }
@@ -108,9 +110,10 @@ function FormMp({ sugeridos, min }: { sugeridos: number[]; min: number }) {
     try {
       const r = await contribuir({
         slug: "jujuy",
+        website,
         via: {
           rail: "mp",
-          montoCentavos: pesos * 100,
+          montoCentavos: centavos,
           ...(email.trim() ? { email: email.trim() } : {}),
         },
       });
@@ -146,7 +149,8 @@ function FormMp({ sugeridos, min }: { sugeridos: number[]; min: number }) {
             </button>
           ))}
           <input
-            inputMode="numeric"
+            inputMode="decimal"
+            aria-label="Otro monto"
             placeholder="Otro monto"
             value={libre}
             onChange={(e) => setLibre(e.target.value)}
@@ -286,7 +290,7 @@ function BloqueCrypto({
       <form onSubmit={avisar} className="flex max-w-md flex-col gap-4">
         <label
           htmlFor="tx-hash"
-          className="font-mono text-[11px] uppercase tracking-[0.14em] text-azul/70"
+          className="font-mono text-[11px] uppercase tracking-[0.14em] text-azul/80"
         >
           ¿Ya mandaste? Pegá tu tx hash y lo seguimos
         </label>
@@ -297,7 +301,11 @@ function BloqueCrypto({
           placeholder="0x…"
           className="w-full border-0 border-b border-azul/40 bg-transparent py-2 font-mono text-sm text-azul placeholder:text-azul/40 focus:border-azul focus:outline-none"
         />
-        <div className="flex flex-wrap items-center gap-2">
+        <div
+          role="group"
+          aria-label="Red"
+          className="flex flex-wrap items-center gap-2"
+        >
           {crypto.chains.map((c) => (
             <button
               key={c}
@@ -314,6 +322,8 @@ function BloqueCrypto({
           ))}
           <input
             type="email"
+            autoComplete="email"
+            aria-label="Email (opcional)"
             placeholder="Email (opcional)"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
