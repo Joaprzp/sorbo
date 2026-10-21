@@ -176,9 +176,15 @@ export class EvmIndexerHttp implements EvmPort {
     const head = (await this.rpc(chain, "eth_blockNumber", [])) as string;
     const confs = (blockNum?: string) =>
       blockNum && head ? Math.max(1, parseInt(head, 16) - parseInt(blockNum, 16) + 1) : 0;
-    // Reporta hechos on-chain (contrato incluido); la validez la decide el dominio.
+    // Reporta hechos on-chain; la validez la decide el dominio. Filtrar por
+    // contrato, nunca por símbolo — el indexer puede reportarlo distinto.
+    const contratos = new Set(
+      Object.values(TOKEN_CONTRACTS[chain] ?? {}).map((t) => t.address),
+    );
     const out: EvmTransfer[] = (r?.transfers ?? [])
-      .filter((t) => t.asset === "USDC" || t.asset === "USDT")
+      .filter((t) =>
+        contratos.has(String(t.rawContract?.address ?? "").toLowerCase()),
+      )
       .map((t) => ({
         chain,
         txHash: String(t.hash),
@@ -192,7 +198,11 @@ export class EvmIndexerHttp implements EvmPort {
   }
 
   // Verificación de un hash: receipt + log Transfer del token conocido.
-  async getTx(chain: string, txHash: string): Promise<EvmTransfer | null> {
+  async getTx(
+    chain: string,
+    txHash: string,
+    address?: string,
+  ): Promise<EvmTransfer | null> {
     const receipt = (await this.rpc(chain, "eth_getTransactionReceipt", [
       txHash,
     ])) as {
@@ -206,6 +216,7 @@ export class EvmIndexerHttp implements EvmPort {
     const confs = receipt.blockNumber && head
       ? parseInt(head, 16) - parseInt(receipt.blockNumber, 16) + 1
       : 0;
+    let primero: EvmTransfer | null = null;
     for (const log of receipt.logs ?? []) {
       const contract = String(log.address).toLowerCase();
       for (const [asset, info] of Object.entries(tokens)) {
@@ -215,10 +226,13 @@ export class EvmIndexerHttp implements EvmPort {
         const to = `0x${topics[2].slice(-40)}`;
         const raw = BigInt(log.data);
         const usdCents = Math.round(Number(raw) * 100 / 10 ** info.decimals);
-        return { chain, txHash, to, asset, contract, usdCents, confirmations: confs };
+        const cand = { chain, txHash, to, asset, contract, usdCents, confirmations: confs };
+        // En una tx multi-transfer nos quedamos con el log que nos paga a nosotros.
+        if (address && to.toLowerCase() === address.toLowerCase()) return cand;
+        primero ??= cand;
       }
     }
-    return null;
+    return primero;
   }
 }
 

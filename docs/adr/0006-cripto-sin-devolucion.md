@@ -16,13 +16,20 @@ riesgo real para ahorrar un click.
 omitido: es una política del dominio, y se declara antes del QR:
 
 ```
-USDC O USDT · BASE O POLYGON · MÍNIMO 5 · NO HAY DEVOLUCIÓN EN CRIPTO
+USDC O USDT · <REDES SOPORTADAS> · MÍNIMO 5 · NO HAY DEVOLUCIÓN EN CRIPTO
 ```
 
-Solamente se aceptan USDC/USDT en Base y Polygon (una sola address EVM, un
-solo QR). El aporte cotiza a MEP al momento de la acreditación on-chain y el
-tipo de cambio queda persistido en la contribución. Dust, assets o redes no
-soportadas no cuentan.
+Solamente se aceptan USDC/USDT en las redes que publica la pieza — una sola
+address EVM, un solo QR. El aporte cotiza a MEP al momento de la acreditación
+on-chain y el tipo de cambio queda persistido en la contribución. Dust,
+assets o redes no soportadas no cuentan.
+
+**Enmienda 2026-10-24:** las redes soportadas pasaron de Base y Polygon a
+siete — se suman Ethereum, Optimism, BNB Chain (BEP-20), Celo y Monad —
+porque la address de destino ya las aceptaba en la práctica: un envío por
+una red no escaneada llegaba a la wallet sin contar en la campaña. La lista
+la publica el backend y la validación es por contrato oficial por red, no
+por el símbolo que reporta el indexer.
 
 ## Consecuencias
 

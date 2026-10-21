@@ -1,24 +1,28 @@
 import type { MailKind } from "./ports";
 import { ars } from "../../src/lib/format";
 
-export const MAIL_SUBJECTS: Record<MailKind, string> = {
-  acreditacion: "Tu contribución a Sorbo Jujuy se acreditó",
-  devolucion: "Te devolvimos tu contribución a Sorbo Jujuy",
-  meta_cumplida: "Se cumplió la meta de Jujuy",
+const MAIL: Record<MailKind, { subject: string; titulo: string; cuerpo: string }> = {
+  acreditacion: {
+    subject: "Tu contribución a Sorbo Jujuy se acreditó",
+    titulo: "Acreditado.",
+    cuerpo: "Tu aporte ya suma a la campaña de Jujuy.",
+  },
+  devolucion: {
+    subject: "Te devolvimos tu contribución a Sorbo Jujuy",
+    titulo: "Devuelto.",
+    cuerpo: "Tu aporte volvió a tu medio de pago.",
+  },
+  meta_cumplida: {
+    subject: "Se cumplió la meta de Jujuy",
+    titulo: "Meta cumplida.",
+    cuerpo:
+      "Juntamos lo que faltaba. El próximo Sorbo es en Jujuy — y es tuyo también.",
+  },
 };
 
-const MAIL_TITULOS: Record<MailKind, string> = {
-  acreditacion: "Acreditado.",
-  devolucion: "Devuelto.",
-  meta_cumplida: "Meta cumplida.",
-};
-
-const MAIL_CUERPOS: Record<MailKind, string> = {
-  acreditacion: "Tu aporte ya suma a la campaña de Jujuy.",
-  devolucion: "Tu aporte volvió a tu medio de pago.",
-  meta_cumplida:
-    "Juntamos lo que faltaba. El próximo Sorbo es en Jujuy — y es tuyo también.",
-};
+export const MAIL_SUBJECTS: Record<MailKind, string> = Object.fromEntries(
+  Object.entries(MAIL).map(([k, v]) => [k, v.subject]),
+) as Record<MailKind, string>;
 
 // Hex literales: los clientes de mail no evalúan CSS ni tokens oklch.
 const AZUL = "#0D34E9";
@@ -52,8 +56,8 @@ export function mailHtml(
     </tr>
     <tr>
       <td colspan="2" style="padding:40px 0 0;">
-        <h1 style="margin:0; font-family:Archivo,Arial,Helvetica,sans-serif; font-size:34px; line-height:1; font-weight:bold; text-transform:uppercase; color:${AZUL};">${MAIL_TITULOS[kind]}</h1>
-        <p style="${mono} color:${AZUL_80}; margin:20px 0 0; line-height:2;">${MAIL_CUERPOS[kind]}</p>
+        <h1 style="margin:0; font-family:Archivo,Arial,Helvetica,sans-serif; font-size:34px; line-height:1; font-weight:bold; text-transform:uppercase; color:${AZUL};">${MAIL[kind].titulo}</h1>
+        <p style="${mono} color:${AZUL_80}; margin:20px 0 0; line-height:2;">${MAIL[kind].cuerpo}</p>
       </td>
     </tr>
     ${monto}
@@ -81,5 +85,5 @@ export function mailText(
     data.montoCentavos !== undefined
       ? `Monto: ${ars(data.montoCentavos)}\n\n`
       : "";
-  return `${MAIL_TITULOS[kind]}\n\n${MAIL_CUERPOS[kind]}\n\n${monto}Campaña: ${baseUrl}/jujuy\n\nSorbo — Dean Funes 244, Salta · @sorbolabs`;
+  return `${MAIL[kind].titulo}\n\n${MAIL[kind].cuerpo}\n\n${monto}Campaña: ${baseUrl}/jujuy\n\nSorbo — Dean Funes 244, Salta · @sorbolabs`;
 }

@@ -125,6 +125,26 @@ function EsqueletoProgreso() {
   );
 }
 
+function CampoTrampa({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  return (
+    <input
+      type="text"
+      tabIndex={-1}
+      autoComplete="off"
+      aria-hidden="true"
+      className="hidden"
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+    />
+  );
+}
+
 function FormMp({ sugeridos, min }: { sugeridos: number[]; min: number }) {
   const contribuir = useAction(api.contributions.contribuir);
   const [monto, setMonto] = useState<number>(sugeridos[0] ?? min);
@@ -220,15 +240,7 @@ function FormMp({ sugeridos, min }: { sugeridos: number[]; min: number }) {
         </p>
       </div>
 
-      <input
-        type="text"
-        tabIndex={-1}
-        autoComplete="off"
-        aria-hidden="true"
-        className="hidden"
-        value={website}
-        onChange={(e) => setWebsite(e.target.value)}
-      />
+      <CampoTrampa value={website} onChange={setWebsite} />
 
       <div className="flex flex-wrap items-center gap-5">
         <button
@@ -331,15 +343,7 @@ function BloqueCrypto({
         </div>
       </div>
       <form onSubmit={avisar} className="flex max-w-md flex-col gap-4">
-        <input
-          type="text"
-          tabIndex={-1}
-          autoComplete="off"
-          aria-hidden="true"
-          className="hidden"
-          value={website}
-          onChange={(e) => setWebsite(e.target.value)}
-        />
+        <CampoTrampa value={website} onChange={setWebsite} />
         <label
           htmlFor="tx-hash"
           className="font-mono text-[11px] uppercase tracking-[0.14em] text-azul/80"

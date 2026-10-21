@@ -8,9 +8,6 @@ export const CHAINS_SOPORTADAS = [
   "celo",
   "monad",
 ];
-// USDT0/USDt es el despliegue omnichain de Tether (LayerZero OFT): misma
-// plata, símbolo distinto según lo reporte el indexer.
-export const ASSETS_SOPORTADOS = ["USDC", "USDT", "USDT0", "USDt"];
 export const MIN_USD_CENTS = 500; // 5 USD — paridad con el latte
 export const MIN_CONFIRMACIONES = 1;
 export const MIN_MP_CENTAVOS = 500_000; // $5.000 ARS
@@ -37,6 +34,7 @@ export const TOKEN_CONTRACTS: Record<
   optimism: {
     USDC: { address: "0x0b2c639c533813f4aa9d7837caf62653d097ff85", decimals: 6 },
     USDT: { address: "0x94b008aa00579c1307b0ef2c499ad98a8ce58e58", decimals: 6 },
+    // USDT0: Tether omnichain (LayerZero OFT) — mismo dólar, otro contrato.
     USDT0: { address: "0x01bff41798a0bcf287b996046ca68b395dbc1071", decimals: 6 },
   },
   bsc: {
@@ -49,8 +47,7 @@ export const TOKEN_CONTRACTS: Record<
   },
   monad: {
     USDC: { address: "0x754704bc059f8c67012fed69bc8a327a5aafb603", decimals: 6 },
-    USDT: { address: "0xe7cd86e13ac4309349f30b3435a9d337750fc82d", decimals: 6 },
+    // En Monad el único Tether es el USDT0 omnichain.
     USDT0: { address: "0xe7cd86e13ac4309349f30b3435a9d337750fc82d", decimals: 6 },
-    USDt: { address: "0xe7cd86e13ac4309349f30b3435a9d337750fc82d", decimals: 6 },
   },
 };

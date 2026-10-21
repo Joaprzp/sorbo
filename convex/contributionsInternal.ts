@@ -448,7 +448,7 @@ export const reclamarTx = internalAction({
     let tx = null;
     for (const chain of CHAINS_SOPORTADAS) {
       try {
-        tx = await ports.evm.getTx(chain, txHash);
+        tx = await ports.evm.getTx(chain, txHash, address);
       } catch (e) {
         console.error(`getTx ${chain} falló`, e);
         continue;

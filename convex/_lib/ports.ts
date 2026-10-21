@@ -33,7 +33,7 @@ export interface EvmTransfer {
   chain: string;
   txHash: string;
   to: string;
-  asset: string; // "USDC" | "USDT" | otro
+  asset: string; // símbolo reportado por el indexer — no identidad
   contract: string; // contrato ERC-20 visto on-chain — el símbolo no se cree
   usdCents: number;
   confirmations: number;
@@ -41,7 +41,7 @@ export interface EvmTransfer {
 
 export interface EvmPort {
   inboundTransfers(address: string, chain: string, cursor?: string): Promise<{ transfers: EvmTransfer[]; cursor?: string }>;
-  getTx(chain: string, txHash: string): Promise<EvmTransfer | null>;
+  getTx(chain: string, txHash: string, address?: string): Promise<EvmTransfer | null>;
 }
 
 export interface FxPort {

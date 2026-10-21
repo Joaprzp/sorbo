@@ -500,6 +500,35 @@ test("scan ignora dust, asset no soportado, contrato falso y otra address", asyn
   expect(p!.contribuyentes).toBe(0);
 });
 
+test("scan acredita USDT0 omnichain aunque el símbolo reportado varíe", async () => {
+  const t = convexTest(schema, modules);
+  await campania(t);
+  const evm = new EvmFake();
+  evm.transfers.push(
+    txBase({
+      chain: "monad",
+      txHash: "0xmonadt0",
+      asset: "USDT0",
+      contract: "0xe7cd86e13ac4309349f30b3435a9d337750fc82d",
+    }),
+    txBase({
+      chain: "optimism",
+      txHash: "0xopt0",
+      // El indexer puede reportar "USDT" aunque el contrato sea USDT0:
+      // la validación va por contrato, no por símbolo.
+      asset: "USDT",
+      contract: "0x01bff41798a0bcf287b996046ca68b395dbc1071",
+    }),
+  );
+  setPortsForTesting(puertos(null, evm));
+
+  await t.action(internal.contributionsInternal.escanearCrypto, {});
+  await drenar(t);
+
+  const p = await t.query(api.campaigns.progreso, { slug: "jujuy" });
+  expect(p!.contribuyentes).toBe(2);
+});
+
 test("scan es idempotente por txHash", async () => {
   const t = convexTest(schema, modules);
   await campania(t);
