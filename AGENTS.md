@@ -3,7 +3,7 @@
 Landing de Sorbo Labs (`sorbolabs.com`): una sola pieza de marca — un viewport,
 un titular, un form de lista de espera, un bloque de datos. No es un sitio de
 marketing; las decisiones de composición viven en `docs/adr/` y el glosario en
-`CONTEXT.md`.
+`GLOSSARY.md`.
 
 ## Frontera pública/privada
 
