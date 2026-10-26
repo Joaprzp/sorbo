@@ -11,10 +11,11 @@ sin respaldo. La meta pasó de 16M a 75M (ADR-0007) y hace falta una razón
 concreta para aportar más allá del mínimo. Sorbo ya tiene qué dar sin
 inventar nada: café.
 
-Los números que fijan la regla: el costo por taza, descartables incluidos,
-ronda $1.900; un latte se vende a $5.000 y uno de sabor a $7.000. Tres
-cafés por $5.000 costaban más que el aporte neto: la campaña perdía plata
-en cada mínimo.
+La regla sale del costo real por taza (los números viven fuera del repo, en
+las notas privadas): tres cafés por el aporte mínimo costaban más que lo
+que llega después del cobro, y la campaña perdía plata en cada mínimo. La
+relación elegida deja el costo de la recompensa dentro del rango habitual
+de un crowdfunding con recompensas.
 
 ## Decisión
 
@@ -44,13 +45,15 @@ nombres en la pared, sin merch.
   trabar los ingresos nuevos por 15 minutos; las sesiones abiertas siguen.
 
 El presupuesto no cambia: los cafés de recompensa se pagan con la operación,
-no con la meta. Peor caso aceptado: ~8.000 cafés y ~$15M de costo en los
-primeros 6 meses si toda la meta llegara con email y se canjeara entera.
+no con la meta. El peor caso (toda la meta con email y canjeada entera) está
+calculado y aceptado en las notas privadas.
+
+**Cripto:** el hash de una transfer es público apenas entra al bloque. Un
+aporte cripto da cafés solo si el aviso con email se dejó antes del bloque;
+si no, suma a la meta pero no a la recompensa.
 
 ## Consecuencias
 
-- El aporte se parece más a una preventa que a una donación: hay que
-  validarlo con el contador (facturación y Ganancias).
 - La pieza `/jujuy` gana un segundo bloque (recompensa) y el de contribuir
   pasa a una banda Bruma: dos tamaños de titular, el máximo del manual.
 - Los montos sugeridos pasan a $5.000 · $15.000 · $45.000 · $95.000
