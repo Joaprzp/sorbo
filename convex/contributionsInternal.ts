@@ -470,6 +470,7 @@ export const reclamarTx = internalAction({
       if (existente.estado === "aprobada" && existente._id !== id) {
         await ctx.runMutation(internal.contributionsInternal.vincularReclamo, {
           id,
+          existenteId: existente._id,
           aporteCentavos: existente.aporteCentavos ?? 0,
         });
       }
@@ -503,7 +504,11 @@ export const reclamarTx = internalAction({
 });
 
 export const vincularReclamo = internalMutation({
-  args: { id: v.id("contribuciones"), aporteCentavos: v.number() },
+  args: {
+    id: v.id("contribuciones"),
+    existenteId: v.id("contribuciones"),
+    aporteCentavos: v.number(),
+  },
   handler: async (ctx, args) => {
     const c = await ctx.db.get(args.id);
     if (!c || c.estado !== "pendiente") return;
@@ -511,9 +516,16 @@ export const vincularReclamo = internalMutation({
       estado: "aprobada",
       aporteCentavos: args.aporteCentavos,
       acreditadaAt: Date.now(),
+      reclamoDe: args.existenteId,
     });
     await evento(ctx, args.id, "reclamo_ya_acreditado", Date.now());
-    if (c.email) await asegurarRecompensa(ctx, c.campaniaId, c.email);
+    // Los cafés van con la plata: el primer reclamo le da su email a la fila
+    // de la transfer; uno posterior de la misma transfer no suma cafés.
+    const existente = await ctx.db.get(args.existenteId);
+    if (c.email && existente && !existente.email) {
+      await ctx.db.patch(existente._id, { email: c.email });
+      await asegurarRecompensa(ctx, c.campaniaId, c.email);
+    }
     if (c.email) {
       await ctx.scheduler.runAfter(0, internal.contributionsInternal.enviarNotificacion, {
         contribucionId: args.id,

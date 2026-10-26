@@ -4,11 +4,13 @@ import { Link } from "@tanstack/react-router";
 import type { Id } from "../../convex/_generated/dataModel";
 import { api } from "../../convex/_generated/api";
 import { Pieza } from "./pieza";
-import { fechaAR, tokenStaff } from "../lib/staffSesion";
+import { tokenStaff } from "../lib/staffSesion";
+import { cafes as cafesN, fechaAR } from "../lib/format";
+import type { EstadoRecompensa } from "../../convex/_lib/recompensa";
 
-const cafes = (n: number) => (n === 1 ? "1 café" : n === 0 ? "Sin cafés" : `${n} cafés`);
+const cafes = (n: number) => (n === 0 ? "Sin cafés" : cafesN(n));
 
-function bajada(estado: string, venceAt?: number): string {
+function bajada(estado: EstadoRecompensa, venceAt?: number): string {
   switch (estado) {
     case "reservado":
       return "Se confirman si se cumple la meta.";

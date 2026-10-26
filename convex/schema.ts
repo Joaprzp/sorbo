@@ -44,6 +44,9 @@ export default defineSchema({
     ),
     refundIntentos: v.optional(v.number()),
     refundError: v.optional(v.string()),
+    // Reclamo de una transfer que el scan ya acreditó: la plata vive en esa
+    // fila; esta solo muestra el estado y no suma cafés (ADR-0008).
+    reclamoDe: v.optional(v.id("contribuciones")),
     createdAt: v.number(),
   })
     .index("by_token", ["token"])

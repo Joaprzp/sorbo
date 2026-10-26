@@ -40,3 +40,9 @@ test("apertura y vencimiento dicen las fechas", () => {
   );
   expect(mailText("vence_pronto", { recompensa: activa }, BASE)).toContain("vencen el 15/9/2027");
 });
+
+test("con la meta cumplida el mail ya no dice que falta cumplirla", () => {
+  const texto = mailText("acreditacion", { recompensa: { ...r, estado: "confirmado" } }, BASE);
+  expect(texto).toContain("La meta ya se cumplió");
+  expect(texto).not.toContain("cuando se cumpla la meta");
+});

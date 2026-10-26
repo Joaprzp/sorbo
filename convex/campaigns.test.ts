@@ -984,13 +984,13 @@ async function conApertura(t: ReturnType<typeof convexTest>, email = "s@s.com", 
 }
 
 async function sesionStaff(t: ReturnType<typeof convexTest>, clave = "tablet") {
-  const r = await t.mutation(api.staff.ingresar, { pin: "4821", nombre: "Tablet barra", clave });
+  const r = await t.mutation(api.staff.ingresar, { pin: "482193", nombre: "Tablet barra", clave });
   if (!r.token) throw new Error(r.error);
   return r.token;
 }
 
 test("staff: PIN correcto abre sesión; el QR público no muestra el código", async () => {
-  process.env.STAFF_PIN = "4821";
+  process.env.STAFF_PIN = "482193";
   const t = convexTest(schema, modules);
   const r = await conApertura(t);
   const publico = await t.query(api.staff.ver, { qrId: r.qrId });
@@ -1002,7 +1002,7 @@ test("staff: PIN correcto abre sesión; el QR público no muestra el código", a
 });
 
 test("staff: 5 PIN incorrectos bloquean el dispositivo y avisan al admin", async () => {
-  process.env.STAFF_PIN = "4821";
+  process.env.STAFF_PIN = "482193";
   const t = convexTest(schema, modules);
   setPortsForTesting(puertos(null));
   pushMemoria.enviados.length = 0;
@@ -1011,7 +1011,7 @@ test("staff: 5 PIN incorrectos bloquean el dispositivo y avisan al admin", async
       error: "PIN_INCORRECTO",
     });
   }
-  expect(await t.mutation(api.staff.ingresar, { pin: "4821", nombre: "x", clave: "cel" })).toEqual({
+  expect(await t.mutation(api.staff.ingresar, { pin: "482193", nombre: "x", clave: "cel" })).toEqual({
     error: "PIN_BLOQUEADO",
   });
   // Otro dispositivo sigue pudiendo entrar.
@@ -1021,7 +1021,7 @@ test("staff: 5 PIN incorrectos bloquean el dispositivo y avisan al admin", async
 });
 
 test("canje: descuenta, no deja pasar del saldo y se puede deshacer", async () => {
-  process.env.STAFF_PIN = "4821";
+  process.env.STAFF_PIN = "482193";
   const t = convexTest(schema, modules);
   const r = await conApertura(t); // $25.000 → 3 cafés
   const token = await sesionStaff(t);
@@ -1036,7 +1036,7 @@ test("canje: descuenta, no deja pasar del saldo y se puede deshacer", async () =
 });
 
 test("canje: sin sesión, revocada o antes de la apertura no se puede", async () => {
-  process.env.STAFF_PIN = "4821";
+  process.env.STAFF_PIN = "482193";
   const t = convexTest(schema, modules);
   await campania(t); // meta lejos: sin apertura posible
   await acreditar(t, 500_000, { email: "z@z.com" });
@@ -1051,7 +1051,7 @@ test("canje: sin sesión, revocada o antes de la apertura no se puede", async ()
 });
 
 test("canje: el código corto encuentra el QR solo con sesión", async () => {
-  process.env.STAFF_PIN = "4821";
+  process.env.STAFF_PIN = "482193";
   const t = convexTest(schema, modules);
   const r = await conApertura(t);
   await expect(t.query(api.staff.buscarCodigo, { codigo: r.codigo, token: "x" })).rejects.toThrow("SIN_SESION");
@@ -1113,4 +1113,63 @@ test("mail: fijarApertura avisa a quien tiene cafés; el vencimiento avisa una s
   mailMemoria.conDatos.length = 0;
   await t.action(internal.recompensas.avisarVencimientos, { ahora: apertura + 10 * DIA_MS });
   expect(mailMemoria.conDatos).toHaveLength(0);
+});
+
+// --- correcciones del review de recompensas ---
+
+test("recompensa: dos reclamos de la misma transfer no duplican cafés", async () => {
+  const t = convexTest(schema, modules);
+  await campania(t);
+  const evm = new EvmFake();
+  evm.transfers.push(txBase({ txHash: "0xdoble", usdCents: 5000 })); // 50 USD → 6 cafés
+  setPortsForTesting(puertos(null, evm));
+  await t.action(internal.contributionsInternal.escanearCrypto, {}); // el scan llega primero
+  await drenar(t);
+  for (const email of ["p@p.com", "p@p.com", "q@q.com"]) {
+    await t.action(api.contributions.contribuir, {
+      slug: "jujuy",
+      via: { rail: "crypto", chainId: "base", txHash: "0xdoble", email },
+    });
+    await drenar(t);
+  }
+  expect(await recompensaDe(t, "p@p.com")).toMatchObject({ cafes: 6 });
+  expect((await recompensaDe(t, "q@q.com"))?.cafes ?? 0).toBe(0);
+});
+
+test("recompensa: una devolución en curso ya no suma cafés", async () => {
+  const t = convexTest(schema, modules);
+  await campania(t);
+  await acreditar(t, 500_000, { email: "r@r.com" });
+  await t.run(async (ctx) => {
+    const c = (await ctx.db.query("contribuciones").collect()).find((x) => x.email === "r@r.com")!;
+    await ctx.db.patch(c._id, { refundEstado: "pendiente" });
+  });
+  expect(await recompensaDe(t, "r@r.com")).toMatchObject({ cafes: 0 });
+});
+
+test("fijarApertura: la segunda vez exige corregir y no reenvía mails", async () => {
+  const t = convexTest(schema, modules);
+  await t.run(async (ctx) => {
+    await ctx.db.insert("campaigns", { slug: "jujuy", metaCentavos: 500_000, recaudadoNetoCentavos: 0, contribuyentes: 0 });
+  });
+  await acreditar(t, 500_000, { email: "u@u.com" });
+  await drenar(t);
+  await t.mutation(internal.recompensas.fijarApertura, { slug: "jujuy", aperturaAt: Date.now() });
+  await drenar(t);
+  await expect(
+    t.mutation(internal.recompensas.fijarApertura, { slug: "jujuy", aperturaAt: Date.now() + 1 }),
+  ).rejects.toThrow("APERTURA_YA_FIJADA");
+  mailMemoria.conDatos.length = 0;
+  await t.mutation(internal.recompensas.fijarApertura, { slug: "jujuy", aperturaAt: Date.now() + 1, corregir: true });
+  await drenar(t);
+  expect(mailMemoria.conDatos).toHaveLength(0);
+});
+
+test("staff: un PIN de menos de 6 dígitos deja el acceso deshabilitado", async () => {
+  process.env.STAFF_PIN = "4821";
+  const t = convexTest(schema, modules);
+  await expect(
+    t.mutation(api.staff.ingresar, { pin: "4821", nombre: "x", clave: "c" }),
+  ).rejects.toThrow("STAFF_NO_CONFIGURADO");
+  process.env.STAFF_PIN = "482193";
 });

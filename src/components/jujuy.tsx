@@ -5,8 +5,14 @@ import { Link, useNavigate } from "@tanstack/react-router";
 import { encodeQR } from "qr";
 import { api } from "../../convex/_generated/api";
 import { Pieza } from "./pieza";
-import { ars } from "../lib/format";
-import { cafesPorTotal } from "../../convex/_lib/recompensa";
+import { ars, cafes } from "../lib/format";
+import {
+  CAFE_EXTRA_CENTAVOS,
+  MESES_DE_CANJE,
+  PRIMER_CAFE_CENTAVOS,
+  TOPE_CAFES,
+  cafesPorTotal,
+} from "../../convex/_lib/recompensa";
 
 const errores: Record<string, string> = {
   MONTO_MINIMO: "El mínimo es $5.000.",
@@ -452,8 +458,6 @@ function BloqueCrypto({
   );
 }
 
-const cafes = (n: number) => (n === 1 ? "1 café" : `${n} cafés`);
-
 // ADR-0008: lo primero que se ve antes de aportar. Segundo y último tamaño de
 // titular de la pieza.
 function Recompensa() {
@@ -468,20 +472,20 @@ function Recompensa() {
       </h2>
       <dl className="mt-8 border-t border-azul/40">
         <div className={fila}>
-          <dt>{ars(500_000)}</dt>
+          <dt>{ars(PRIMER_CAFE_CENTAVOS)}</dt>
           <dd className="text-azul">1 café</dd>
         </div>
         <div className={fila}>
-          <dt>Cada {ars(1_000_000)} más</dt>
+          <dt>Cada {ars(CAFE_EXTRA_CENTAVOS)} más</dt>
           <dd className="text-azul">+1 café</dd>
         </div>
         <div className={fila}>
           <dt>Tope</dt>
-          <dd className="text-azul">10 cafés</dd>
+          <dd className="text-azul">{cafes(TOPE_CAFES)}</dd>
         </div>
       </dl>
       <p className="mt-4 font-mono text-[11px] uppercase leading-relaxed tracking-[0.14em] text-azul/70">
-        Todos los cafés de la carta · 6 meses desde la apertura · Con email.
+        Todos los cafés de la carta · {MESES_DE_CANJE} meses desde la apertura · Con email.
       </p>
     </section>
   );

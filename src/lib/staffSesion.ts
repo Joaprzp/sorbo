@@ -32,6 +32,3 @@ export function claveDispositivo(): string {
   }
   return c;
 }
-
-export const fechaAR = (ms: number) =>
-  new Date(ms).toLocaleDateString("es-AR", { timeZone: "America/Argentina/Buenos_Aires" });

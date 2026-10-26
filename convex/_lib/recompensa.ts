@@ -1,9 +1,10 @@
 // Recompensa en café (ADR-0008) — reglas puras, sin Convex.
 
-const PRIMER_CAFE_CENTAVOS = 500_000; // $5.000
-const CAFE_EXTRA_CENTAVOS = 1_000_000; // cada $10.000 más
-const TOPE_CAFES = 10;
-const MESES_DE_CANJE = 6;
+// Exportadas para que /jujuy muestre la misma regla que se calcula.
+export const PRIMER_CAFE_CENTAVOS = 500_000; // $5.000
+export const CAFE_EXTRA_CENTAVOS = 1_000_000; // cada $10.000 más
+export const TOPE_CAFES = 10;
+export const MESES_DE_CANJE = 6;
 const ART_OFFSET_MS = -3 * 60 * 60 * 1000; // Argentina, sin horario de verano
 
 // Por persona, sobre el total de sus aportes aprobados.

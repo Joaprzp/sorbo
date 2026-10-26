@@ -50,6 +50,8 @@ export interface FxPort {
   mepCentavosPorUsd(): Promise<number>;
 }
 
+import type { EstadoRecompensa } from "./recompensa";
+
 export type MailKind =
   | "acreditacion"
   | "devolucion"
@@ -62,7 +64,7 @@ export type RecompensaMail = {
   codigo: string;
   qrId: string;
   saldo: number;
-  estado: "reservado" | "confirmado" | "activo" | "vencido" | "anulado";
+  estado: EstadoRecompensa;
   aperturaAt?: number;
   venceAt?: number;
 };

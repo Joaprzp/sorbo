@@ -1,5 +1,5 @@
 import type { MailData, MailKind, RecompensaMail } from "./ports";
-import { ars } from "../../src/lib/format";
+import { ars, cafes, fechaAR as fecha } from "../../src/lib/format";
 
 const MAIL: Record<MailKind, { subject: string; titulo: string; cuerpo: string }> = {
   acreditacion: {
@@ -43,9 +43,6 @@ const AZUL_40 = "rgba(13,52,233,0.4)";
 const mono =
   "font-family: ui-monospace, 'Geist Mono', Menlo, monospace; font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase;";
 
-const fecha = (ms: number) =>
-  new Date(ms).toLocaleDateString("es-AR", { timeZone: "America/Argentina/Buenos_Aires" });
-const cafes = (n: number) => (n === 1 ? "1 café" : `${n} cafés`);
 
 // La línea que explica la recompensa, según el mail y el estado del saldo.
 function lineaRecompensa(kind: MailKind, r: RecompensaMail): string {
@@ -62,6 +59,9 @@ function lineaRecompensa(kind: MailKind, r: RecompensaMail): string {
   }
   if (r.estado === "activo" && r.venceAt !== undefined) {
     return `Tenés ${cafes(r.saldo)} para canjear hasta el ${fecha(r.venceAt)}.`;
+  }
+  if (r.estado === "confirmado") {
+    return `Tu aporte vuelve en café: ${cafes(r.saldo)}. La meta ya se cumplió: se activan cuando abra el local.`;
   }
   return `Tu aporte vuelve en café: ${cafes(r.saldo)}. Se activan cuando se cumpla la meta y abra el local.`;
 }

@@ -13,8 +13,14 @@ type Escritor = { db: GenericDatabaseWriter<DataModel> };
 const MIN = 60 * 1000;
 const SESION_MS = 90 * 24 * 60 * MIN;
 const BLOQUEO_MS = 15 * MIN;
+// La clave del dispositivo la manda el cliente: frena al que se equivoca,
+// no a un atacante que la rota. Contra ese, el tope global más un PIN de 6+
+// dígitos: 20 intentos cada 15 min son ~1.900 por día, un millón de PINs lleva
+// más de un año. El costo: cualquiera puede trabar los ingresos nuevos por 15
+// min; las sesiones abiertas (90 días) siguen andando.
 const FALLIDOS_DISPOSITIVO = 5;
 const FALLIDOS_GLOBAL = 20;
+const PIN_MINIMO = 6;
 const DESHACER_MS = 5 * MIN;
 
 async function sha256(texto: string): Promise<string> {
@@ -79,8 +85,9 @@ export const ingresar = mutation({
   args: { pin: v.string(), nombre: v.string(), clave: v.string() },
   handler: async (ctx, { pin, nombre, clave }) => {
     const esperado = process.env.STAFF_PIN;
-    if (!esperado) throw new Error("STAFF_NO_CONFIGURADO");
+    if (!esperado || esperado.length < PIN_MINIMO) throw new Error("STAFF_NO_CONFIGURADO");
     const ahora = Date.now();
+    const nombreLimpio = nombre.trim().slice(0, 40) || "Sin nombre";
     const claveDisp = `disp:${clave.slice(0, 64)}`;
     for (const k of [claveDisp, "global"]) {
       const f = await intentos(ctx, k);
@@ -94,7 +101,7 @@ export const ingresar = mutation({
           kind: "staff_bloqueado",
           detalle: bloqueoGlobal
             ? `${FALLIDOS_GLOBAL} PIN incorrectos en 15 min · ingresos bloqueados`
-            : `"${nombre}" bloqueado 15 min por PIN incorrecto`,
+            : `"${nombreLimpio}" bloqueado 15 min por PIN incorrecto`,
         });
       }
       return { error: "PIN_INCORRECTO" as const };
@@ -103,7 +110,7 @@ export const ingresar = mutation({
     if (f) await ctx.db.delete(f._id);
     const token = tokenNuevo();
     await ctx.db.insert("dispositivos", {
-      nombre: nombre.trim().slice(0, 40) || "Sin nombre",
+      nombre: nombreLimpio,
       tokenHash: await sha256(token),
       creadoAt: ahora,
       venceAt: ahora + SESION_MS,

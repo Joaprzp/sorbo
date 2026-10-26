@@ -4,6 +4,7 @@ import { internal } from "./_generated/api";
 import type { GenericDatabaseReader, GenericDatabaseWriter } from "convex/server";
 import type { DataModel, Doc, Id } from "./_generated/dataModel";
 import { resolvePorts, type RecompensaMail } from "./_lib/ports";
+import { fechaAR as fecha } from "../src/lib/format";
 import {
   cafesPorTotal,
   codigoCorto,
@@ -59,8 +60,13 @@ export async function saldoDe(ctx: Lector, r: Doc<"recompensas">, ahora: number)
       q.eq("campaniaId", r.campaniaId).eq("email", r.email),
     )
     .collect();
+  // Cuenta la plata que quedó: sin reclamos (la fila de la transfer ya suma)
+  // ni aportes con una devolución en curso.
   const total = aportes
-    .filter((c) => c.estado === "aprobada")
+    .filter(
+      (c) =>
+        c.estado === "aprobada" && c.reclamoDe === undefined && c.refundEstado !== "pendiente",
+    )
     .reduce((s, c) => s + (c.aporteCentavos ?? 0), 0);
   const cafes = cafesPorTotal(total);
   const canjes = await ctx.db
@@ -84,8 +90,6 @@ export async function saldoDe(ctx: Lector, r: Doc<"recompensas">, ahora: number)
   };
 }
 
-const fecha = (ms: number) =>
-  new Date(ms).toLocaleDateString("es-AR", { timeZone: "America/Argentina/Buenos_Aires" });
 
 async function paraMailDe(ctx: Lector, r: Doc<"recompensas">): Promise<RecompensaMail> {
   const s = await saldoDe(ctx, r, Date.now());
@@ -207,12 +211,15 @@ export const porEmail = internalQuery({
 // cumplida — después del latch no hay devoluciones, así que nunca se canjea
 // un café de un aporte que después vuelve.
 export const fijarApertura = internalMutation({
-  args: { slug: v.string(), aperturaAt: v.number() },
-  handler: async (ctx, { slug, aperturaAt }) => {
+  // `corregir`: mueve una fecha ya fijada sin volver a mandar mails ni push.
+  args: { slug: v.string(), aperturaAt: v.number(), corregir: v.optional(v.boolean()) },
+  handler: async (ctx, { slug, aperturaAt, corregir }) => {
     const campania = await campaniaPorSlug(ctx, slug);
     if (!campania) throw new Error("CAMPANIA_NO_EXISTE");
     if (campania.cumplidaAt === undefined) throw new Error("META_NO_CUMPLIDA");
+    if (campania.aperturaAt !== undefined && !corregir) throw new Error("APERTURA_YA_FIJADA");
     await ctx.db.patch(campania._id, { aperturaAt });
+    if (corregir) return;
     await ctx.scheduler.runAfter(0, internal.contributionsInternal.avisarAdmin, {
       kind: "apertura",
       detalle: `Canje habilitado del ${fecha(aperturaAt)} al ${fecha(vencimiento(aperturaAt))}`,

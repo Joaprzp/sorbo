@@ -3,7 +3,8 @@ import { useConvex, useMutation, useQuery } from "convex/react";
 import { useNavigate } from "@tanstack/react-router";
 import { api } from "../../convex/_generated/api";
 import { Pieza } from "./pieza";
-import { claveDispositivo, fechaAR, guardarTokenStaff, tokenStaff } from "../lib/staffSesion";
+import { claveDispositivo, guardarTokenStaff, tokenStaff } from "../lib/staffSesion";
+import { fechaAR } from "../lib/format";
 
 const campo =
   "mt-2 w-full border-0 border-b border-azul/40 bg-transparent py-2 font-mono text-sm uppercase text-azul placeholder:text-azul/40 focus:border-azul focus:outline-none";
