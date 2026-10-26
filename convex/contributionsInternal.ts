@@ -9,6 +9,7 @@ import { esTransferValida, esContratoSoportado, centavosPorUsd } from "./_lib/ev
 import { CHAINS_SOPORTADAS, MIN_USD_CENTS, TECHO_AVISO_USD_CENTS } from "./_lib/dominio";
 import { ars } from "../src/lib/format";
 import { asegurarRecompensa } from "./recompensas";
+import { campaniaDoc, contribucionDoc } from "./schema";
 
 type Lector = { db: GenericDatabaseReader<DataModel> };
 type Escritor = { db: GenericDatabaseWriter<DataModel> };
@@ -49,6 +50,7 @@ export const crearPendienteMp = internalMutation({
     montoCentavos: v.number(),
     email: v.optional(v.string()),
   },
+  returns: v.object({ id: v.id("contribuciones"), token: v.string() }),
   handler: async (ctx, args) => {
     const campania = await campaniaPorSlug(ctx, args.slug);
     if (!campania) throw new Error("CAMPANIA_NO_EXISTE");
@@ -74,18 +76,21 @@ export const vincularOrden = internalMutation({
     mpOrderId: v.string(),
     checkoutUrl: v.string(),
   },
+  returns: v.null(),
   handler: async (ctx, args) => {
     const c = await ctx.db.get(args.id);
-    if (!c || c.estado !== "pendiente") return;
+    if (!c || c.estado !== "pendiente") return null;
     await ctx.db.patch(args.id, {
       mpOrderId: args.mpOrderId,
       checkoutUrl: args.checkoutUrl,
     });
+    return null;
   },
 });
 
 export const porMpOrderId = internalQuery({
   args: { mpOrderId: v.string() },
+  returns: v.union(v.null(), contribucionDoc),
   handler: async (ctx, { mpOrderId }) => {
     return await ctx.db
       .query("contribuciones")
@@ -102,9 +107,10 @@ export const acreditar = internalMutation({
     aporteCentavos: v.number(),
     ahora: v.optional(v.number()),
   },
+  returns: v.null(),
   handler: async (ctx, args) => {
     const c = await ctx.db.get(args.id);
-    if (!c || (c.estado !== "pendiente" && c.estado !== "expirada")) return;
+    if (!c || (c.estado !== "pendiente" && c.estado !== "expirada")) return null;
     const t = args.ahora ?? Date.now();
     await ctx.db.patch(args.id, {
       estado: "aprobada",
@@ -140,6 +146,7 @@ export const acreditar = internalMutation({
         { campaniaId: campania._id, metaCentavos: campania.metaCentavos },
       );
     }
+    return null;
   },
 });
 
@@ -147,6 +154,7 @@ export const acreditar = internalMutation({
 // expiradas). El índice ordena por email, así los repetidos quedan juntos.
 export const contribuyentesConEmail = internalQuery({
   args: { campaniaId: v.id("campaigns"), cursor: v.union(v.string(), v.null()) },
+  returns: v.object({ emails: v.array(v.string()), isDone: v.boolean(), continueCursor: v.string() }),
   handler: async (ctx, { campaniaId, cursor }) => {
     const pagina = await ctx.db
       .query("contribuciones")
@@ -165,6 +173,7 @@ export const contribuyentesConEmail = internalQuery({
 // Latch recién disparado: un mail a cada contribuyente que dejó email.
 export const anunciarMetaCumplida = internalAction({
   args: { campaniaId: v.id("campaigns"), metaCentavos: v.optional(v.number()) },
+  returns: v.null(),
   handler: async (ctx, { campaniaId, metaCentavos }) => {
     const ports = resolvePorts();
     if (ports.mail) {
@@ -205,19 +214,21 @@ export const anunciarMetaCumplida = internalAction({
         console.error("push meta_cumplida falló", e);
       }
     }
+    return null;
   },
 });
 
 // Webhook / reconciliar / sweep convergen acá: refetch de la verdad en MP.
 export const sincronizarMpPorOrden = internalAction({
   args: { mpOrderId: v.string() },
+  returns: v.null(),
   handler: async (ctx, { mpOrderId }) => {
     const c = await ctx.runQuery(internal.contributionsInternal.porMpOrderId, {
       mpOrderId,
     });
-    if (!c || (c.estado !== "pendiente" && c.estado !== "expirada")) return;
+    if (!c || (c.estado !== "pendiente" && c.estado !== "expirada")) return null;
     const ports = resolvePorts();
-    if (!ports.mp) return;
+    if (!ports.mp) return null;
     const orden = await ports.mp.getOrder(mpOrderId);
     if (
       ordenAcreditada(orden, {
@@ -230,6 +241,7 @@ export const sincronizarMpPorOrden = internalAction({
         aporteCentavos: orden.totalPaidCentavos!,
       });
     }
+    return null;
   },
 });
 
@@ -237,6 +249,7 @@ const VENTANA_EXPIRACION_MS = 35 * 60 * 1000;
 
 export const pendientesMp = internalQuery({
   args: {},
+  returns: v.array(contribucionDoc),
   handler: async (ctx) => {
     return await ctx.db
       .query("contribuciones")
@@ -250,10 +263,11 @@ export const pendientesMp = internalQuery({
 // Cron ~10min: cierra pendientes viejas según la verdad en MP.
 export const barrerExpiracionMp = internalAction({
   args: { ahora: v.optional(v.number()) },
+  returns: v.null(),
   handler: async (ctx, args) => {
     const ahora = args.ahora ?? Date.now();
     const ports = resolvePorts();
-    if (!ports.mp) return;
+    if (!ports.mp) return null;
     const pendientes = (await ctx.runQuery(
       internal.contributionsInternal.pendientesMp,
       {},
@@ -277,6 +291,7 @@ export const barrerExpiracionMp = internalAction({
         // MP inalcanzable → se reintenta en el próximo barrido
       }
     }
+    return null;
   },
 });
 
@@ -285,6 +300,7 @@ const VENTANA_DEVOLUCION_MS = 89 * 86_400_000;
 // Con la meta cumplida no hay devoluciones: el cron sale sin leer aportes.
 export const hayCampaniaAbierta = internalQuery({
   args: {},
+  returns: v.boolean(),
   handler: async (ctx) => {
     const campanias = await ctx.db.query("campaigns").take(50);
     return campanias.some((c) => c.cumplidaAt === undefined);
@@ -293,6 +309,7 @@ export const hayCampaniaAbierta = internalQuery({
 
 export const aprobadasParaDevolucion = internalQuery({
   args: { antesDe: v.number(), cursor: v.union(v.string(), v.null()) },
+  returns: v.object({ ids: v.array(v.id("contribuciones")), isDone: v.boolean(), continueCursor: v.string() }),
   handler: async (ctx, { antesDe, cursor }) => {
     const pagina = await ctx.db
       .query("contribuciones")
@@ -312,6 +329,7 @@ export const aprobadasParaDevolucion = internalQuery({
 
 export const marcarReembolsoPendiente = internalMutation({
   args: { id: v.id("contribuciones") },
+  returns: v.boolean(),
   handler: async (ctx, { id }) => {
     const c = await ctx.db.get(id);
     if (!c || c.estado !== "aprobada" || c.refundEstado !== undefined) return false;
@@ -324,9 +342,10 @@ export const marcarReembolsoPendiente = internalMutation({
 
 export const marcarDevuelta = internalMutation({
   args: { id: v.id("contribuciones") },
+  returns: v.null(),
   handler: async (ctx, { id }) => {
     const c = await ctx.db.get(id);
-    if (!c || c.estado !== "aprobada") return;
+    if (!c || c.estado !== "aprobada") return null;
     const t = Date.now();
     await ctx.db.patch(id, {
       estado: "devuelta",
@@ -350,28 +369,32 @@ export const marcarDevuelta = internalMutation({
         kind: "devolucion",
       });
     }
+    return null;
   },
 });
 
 export const marcarReembolsoFallido = internalMutation({
   args: { id: v.id("contribuciones"), error: v.string() },
+  returns: v.null(),
   handler: async (ctx, { id, error }) => {
     const c = await ctx.db.get(id);
-    if (!c || c.refundEstado === "done") return;
+    if (!c || c.refundEstado === "done") return null;
     await ctx.db.patch(id, { refundEstado: "failed", refundError: error });
     await ctx.scheduler.runAfter(0, internal.contributionsInternal.avisarAdmin, {
       kind: "reembolso_fallido",
       contribucionId: id,
     });
+    return null;
   },
 });
 
 // Cron diario: contribuciones MP aprobadas ≥89d con meta incompleta.
 export const devolucionesDiarias = internalAction({
   args: { ahora: v.optional(v.number()) },
+  returns: v.null(),
   handler: async (ctx, args) => {
     const ahora = args.ahora ?? Date.now();
-    if (!(await ctx.runQuery(internal.contributionsInternal.hayCampaniaAbierta, {}))) return;
+    if (!(await ctx.runQuery(internal.contributionsInternal.hayCampaniaAbierta, {}))) return null;
     let cursor: string | null = null;
     for (;;) {
       const pagina: { ids: Id<"contribuciones">[]; isDone: boolean; continueCursor: string } =
@@ -395,11 +418,13 @@ export const devolucionesDiarias = internalAction({
       if (pagina.isDone) break;
       cursor = pagina.continueCursor;
     }
+    return null;
   },
 });
 
 export const campaniaDe = internalQuery({
   args: { contribucionId: v.id("contribuciones") },
+  returns: v.union(v.null(), campaniaDoc),
   handler: async (ctx, { contribucionId }) => {
     const c = await ctx.db.get(contribucionId);
     return c ? await ctx.db.get(c.campaniaId) : null;
@@ -408,28 +433,31 @@ export const campaniaDe = internalQuery({
 
 export const cancelarReembolso = internalMutation({
   args: { id: v.id("contribuciones") },
+  returns: v.null(),
   handler: async (ctx, { id }) => {
     const c = await ctx.db.get(id);
-    if (!c || c.refundEstado !== "pendiente") return;
+    if (!c || c.refundEstado !== "pendiente") return null;
     await ctx.db.patch(id, { refundEstado: undefined });
     await evento(ctx, id, "reembolso_cancelado", Date.now());
+    return null;
   },
 });
 
 export const ejecutarReembolso = internalAction({
   args: { id: v.id("contribuciones") },
+  returns: v.null(),
   handler: async (ctx, { id }) => {
     const ports = resolvePorts();
-    if (!ports.mp) return;
+    if (!ports.mp) return null;
     const c = await ctx.runQuery(internal.contributionsInternal.porId, { id });
-    if (!c || c.estado !== "aprobada" || c.refundEstado !== "pendiente" || !c.mpOrderId) return;
+    if (!c || c.estado !== "aprobada" || c.refundEstado !== "pendiente" || !c.mpOrderId) return null;
     const camp = await ctx.runQuery(internal.contributionsInternal.campaniaDe, {
       contribucionId: id,
     });
     // La promesa era contra la meta no cumplida: si el latch ya cayó, no vuelve.
     if (camp?.cumplidaAt !== undefined) {
       await ctx.runMutation(internal.contributionsInternal.cancelarReembolso, { id });
-      return;
+      return null;
     }
     const res = await ports.mp.refundOrder(c.mpOrderId, `refund-${c.token}`);
     if (res === "done") {
@@ -441,6 +469,7 @@ export const ejecutarReembolso = internalAction({
       });
     }
     // transient → queda pendiente; el sweep la reintenta
+    return null;
   },
 });
 
@@ -450,6 +479,7 @@ export const crearPendienteCrypto = internalMutation({
     chainId: v.string(),
     email: v.optional(v.string()),
   },
+  returns: v.object({ id: v.id("contribuciones"), token: v.string() }),
   handler: async (ctx, args) => {
     const campania = await campaniaPorSlug(ctx, args.slug);
     if (!campania) throw new Error("CAMPANIA_NO_EXISTE");
@@ -471,6 +501,7 @@ export const crearPendienteCrypto = internalMutation({
 
 export const porTxHash = internalQuery({
   args: { txHash: v.string() },
+  returns: v.union(v.null(), contribucionDoc),
   handler: async (ctx, { txHash }) => {
     return await ctx.db
       .query("contribuciones")
@@ -484,12 +515,13 @@ export const porTxHash = internalQuery({
 // el intent se marca aprobada sin tocar contadores (la plata ya contó).
 export const reclamarTx = internalAction({
   args: { id: v.id("contribuciones"), txHash: v.string() },
+  returns: v.null(),
   handler: async (ctx, { id, txHash }) => {
     const ports = resolvePorts();
     const address = process.env.EVM_ADDRESS;
-    if (!ports.evm || !ports.fx || !address) return;
+    if (!ports.evm || !ports.fx || !address) return null;
     const c = await ctx.runQuery(internal.contributionsInternal.porId, { id });
-    if (!c || c.via !== "crypto" || c.estado !== "pendiente") return;
+    if (!c || c.via !== "crypto" || c.estado !== "pendiente") return null;
     const existente = await ctx.runQuery(
       internal.contributionsInternal.porTxHash,
       { txHash },
@@ -502,7 +534,7 @@ export const reclamarTx = internalAction({
           aporteCentavos: existente.aporteCentavos ?? 0,
         });
       }
-      return;
+      return null;
     }
     // La red declarada es una pista, no un hecho: se busca en todas.
     let tx = null;
@@ -515,7 +547,7 @@ export const reclamarTx = internalAction({
       }
       if (tx) break;
     }
-    if (!tx || !esTransferValida(tx, address)) return;
+    if (!tx || !esTransferValida(tx, address)) return null;
     const mep = await ports.fx.mepCentavosPorUsd();
     await ctx.runMutation(internal.contributionsInternal.vincularTx, {
       id,
@@ -528,6 +560,7 @@ export const reclamarTx = internalAction({
       id,
       aporteCentavos: centavosPorUsd(tx.usdCents, mep),
     });
+    return null;
   },
 });
 
@@ -537,9 +570,10 @@ export const vincularReclamo = internalMutation({
     existenteId: v.id("contribuciones"),
     aporteCentavos: v.number(),
   },
+  returns: v.null(),
   handler: async (ctx, args) => {
     const c = await ctx.db.get(args.id);
-    if (!c || c.estado !== "pendiente") return;
+    if (!c || c.estado !== "pendiente") return null;
     await ctx.db.patch(args.id, {
       estado: "aprobada",
       aporteCentavos: args.aporteCentavos,
@@ -560,6 +594,7 @@ export const vincularReclamo = internalMutation({
         kind: "acreditacion",
       });
     }
+    return null;
   },
 });
 
@@ -571,15 +606,17 @@ export const vincularTx = internalMutation({
     usdCents: v.number(),
     mepCentavosPorUsd: v.number(),
   },
+  returns: v.null(),
   handler: async (ctx, args) => {
     const c = await ctx.db.get(args.id);
-    if (!c || c.estado !== "pendiente") return;
+    if (!c || c.estado !== "pendiente") return null;
     await ctx.db.patch(args.id, {
       txHash: args.txHash,
       chain: args.chain,
       usdCents: args.usdCents,
       mepCentavosPorUsd: args.mepCentavosPorUsd,
     });
+    return null;
   },
 });
 
@@ -592,6 +629,7 @@ export const crearObservadaCrypto = internalMutation({
     usdCents: v.number(),
     mepCentavosPorUsd: v.number(),
   },
+  returns: v.union(v.null(), v.id("contribuciones")),
   handler: async (ctx, args) => {
     if (
       await ctx.db
@@ -623,10 +661,11 @@ export const crearObservadaCrypto = internalMutation({
 // Cron ~5min: la address en cada red soportada.
 export const escanearCrypto = internalAction({
   args: {},
+  returns: v.null(),
   handler: async (ctx) => {
     const ports = resolvePorts();
     const address = process.env.EVM_ADDRESS;
-    if (!ports.evm || !ports.fx || !address) return;
+    if (!ports.evm || !ports.fx || !address) return null;
     let mep: number | null = null;
     let avisosRechazo = 0;
     // Aviso best-effort de "llegó algo que no cuenta": la dedupe vive en
@@ -701,11 +740,13 @@ export const escanearCrypto = internalAction({
         console.error(`scan ${chain} falló`, e);
       }
     }
+    return null;
   },
 });
 
 export const reembolsosEstancados = internalQuery({
   args: { antesDe: v.number() },
+  returns: v.array(contribucionDoc),
   handler: async (ctx, { antesDe }) => {
     const rows = await ctx.db
       .query("contribuciones")
@@ -725,6 +766,7 @@ export const reembolsosEstancados = internalQuery({
 // el que agotó reintentos se marca fallido — eso dispara el aviso al admin.
 export const barrerReembolsos = internalAction({
   args: { ahora: v.optional(v.number()) },
+  returns: v.null(),
   handler: async (ctx, args) => {
     const ahora = args.ahora ?? Date.now();
     const estancados = await ctx.runQuery(
@@ -751,11 +793,13 @@ export const barrerReembolsos = internalAction({
         error: "reintentos agotados",
       });
     }
+    return null;
   },
 });
 
 export const reembolsosAgotados = internalQuery({
   args: {},
+  returns: v.array(contribucionDoc),
   handler: async (ctx) => {
     const rows = await ctx.db
       .query("contribuciones")
@@ -767,10 +811,12 @@ export const reembolsosAgotados = internalQuery({
 
 export const bumpIntentoReembolso = internalMutation({
   args: { id: v.id("contribuciones") },
+  returns: v.null(),
   handler: async (ctx, { id }) => {
     const c = await ctx.db.get(id);
-    if (!c) return;
+    if (!c) return null;
     await ctx.db.patch(id, { refundIntentos: (c.refundIntentos ?? 0) + 1 });
+    return null;
   },
 });
 
@@ -783,13 +829,14 @@ export const enviarNotificacion = internalAction({
       v.literal("meta_cumplida"),
     ),
   },
+  returns: v.null(),
   handler: async (ctx, args) => {
     const ports = resolvePorts();
-    if (!ports.mail) return;
+    if (!ports.mail) return null;
     const c = await ctx.runQuery(internal.contributionsInternal.porId, {
       id: args.contribucionId,
     });
-    if (!c?.email) return;
+    if (!c?.email) return null;
     const recompensa = await ctx.runQuery(internal.recompensas.paraMail, {
       campaniaId: c.campaniaId,
       email: c.email,
@@ -799,11 +846,13 @@ export const enviarNotificacion = internalAction({
       montoCentavos: c.aporteCentavos ?? c.montoCentavos,
       ...(recompensa ? { recompensa } : {}),
     });
+    return null;
   },
 });
 
 export const porToken = internalQuery({
   args: { token: v.string() },
+  returns: v.union(v.null(), contribucionDoc),
   handler: async (ctx, { token }) => {
     return await ctx.db
       .query("contribuciones")
@@ -814,6 +863,7 @@ export const porToken = internalQuery({
 
 export const avisoEnviado = internalQuery({
   args: { clave: v.string() },
+  returns: v.boolean(),
   handler: async (ctx, { clave }) => {
     return !!(await ctx.db
       .query("avisosAdmin")
@@ -825,6 +875,7 @@ export const avisoEnviado = internalQuery({
 // Dedupe de avisos push: devuelve true solo la primera vez para una clave.
 export const registrarAviso = internalMutation({
   args: { clave: v.string() },
+  returns: v.boolean(),
   handler: async (ctx, { clave }) => {
     const existe = await ctx.db
       .query("avisosAdmin")
@@ -850,9 +901,10 @@ export const avisarAdmin = internalAction({
     detalle: v.optional(v.string()),
     clave: v.optional(v.string()),
   },
+  returns: v.null(),
   handler: async (ctx, args) => {
     const ports = resolvePorts();
-    if (!ports.push) return;
+    if (!ports.push) return null;
     const base = process.env.SITE_URL ?? "https://sorbolabs.com";
 
     if (args.kind === "cripto_rechazada") {
@@ -863,7 +915,7 @@ export const avisarAdmin = internalAction({
           clave: args.clave,
         }))
       ) {
-        return;
+        return null;
       }
       await ports.push.push({
         title: "SORBO · LLEGÓ ALGO QUE NO CUENTA",
@@ -877,7 +929,7 @@ export const avisarAdmin = internalAction({
           clave: args.clave,
         });
       }
-      return;
+      return null;
     }
 
     if (args.kind === "staff_bloqueado" || args.kind === "apertura") {
@@ -889,7 +941,7 @@ export const avisarAdmin = internalAction({
         openUrl: `${base}/staff`,
         ...(args.kind === "staff_bloqueado" ? { interruptionLevel: "time-sensitive" as const } : {}),
       });
-      return;
+      return null;
     }
 
     const c = args.contribucionId
@@ -897,7 +949,7 @@ export const avisarAdmin = internalAction({
           id: args.contribucionId,
         })
       : null;
-    if (!c) return;
+    if (!c) return null;
     const campania = await ctx.runQuery(
       internal.contributionsInternal.campaniaDe,
       { contribucionId: c._id },
@@ -922,24 +974,27 @@ export const avisarAdmin = internalAction({
         interruptionLevel: "time-sensitive",
       });
     }
+    return null;
   },
 });
 
 // Una sola vez, desde el dashboard o `bunx convex run`: crea la campaña.
 export const crearCampania = internalMutation({
   args: { slug: v.string(), metaCentavos: v.number() },
+  returns: v.null(),
   handler: async (ctx, args) => {
     const existe = await ctx.db
       .query("campaigns")
       .withIndex("by_slug", (q) => q.eq("slug", args.slug))
       .first();
-    if (existe) return;
+    if (existe) return null;
     await ctx.db.insert("campaigns", {
       slug: args.slug,
       metaCentavos: args.metaCentavos,
       recaudadoNetoCentavos: 0,
       contribuyentes: 0,
     });
+    return null;
   },
 });
 
@@ -948,6 +1003,7 @@ export const crearCampania = internalMutation({
 // sin pasar por el aviso, así que se rechaza.
 export const fijarMeta = internalMutation({
   args: { slug: v.string(), metaCentavos: v.number() },
+  returns: v.null(),
   handler: async (ctx, { slug, metaCentavos }) => {
     const campania = await campaniaPorSlug(ctx, slug);
     if (!campania) throw new Error("CAMPANIA_NO_EXISTE");
@@ -956,20 +1012,24 @@ export const fijarMeta = internalMutation({
       throw new Error("META_INVALIDA");
     }
     await ctx.db.patch(campania._id, { metaCentavos });
+    return null;
   },
 });
 
 export const porId = internalQuery({
   args: { id: v.id("contribuciones") },
+  returns: v.union(v.null(), contribucionDoc),
   handler: async (ctx, { id }) => await ctx.db.get(id),
 });
 
 export const expirar = internalMutation({
   args: { id: v.id("contribuciones") },
+  returns: v.null(),
   handler: async (ctx, args) => {
     const c = await ctx.db.get(args.id);
-    if (!c || c.estado !== "pendiente") return;
+    if (!c || c.estado !== "pendiente") return null;
     await ctx.db.patch(args.id, { estado: "expirada" });
     await evento(ctx, args.id, "expirada", Date.now());
+    return null;
   },
 });

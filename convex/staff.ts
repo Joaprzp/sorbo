@@ -258,6 +258,7 @@ export const deshacer = mutation({
 // Desde `bunx convex run`: corta un dispositivo perdido sin cambiar el PIN.
 export const revocarDispositivo = internalMutation({
   args: { nombre: v.string() },
+  returns: v.number(),
   handler: async (ctx, { nombre }) => {
     const todos = await ctx.db.query("dispositivos").collect();
     const activos = todos.filter((d) => d.nombre === nombre && d.revocadoAt === undefined);
@@ -269,6 +270,13 @@ export const revocarDispositivo = internalMutation({
 // Desde `bunx convex run`: suma por páginas para no pasar el límite de lecturas.
 export const resumenPagina = internalQuery({
   args: { campaniaId: v.id("campaigns"), cursor: v.union(v.string(), v.null()), ahora: v.number() },
+  returns: v.object({
+    personas: v.number(),
+    emitidos: v.number(),
+    canjeados: v.number(),
+    isDone: v.boolean(),
+    continueCursor: v.string(),
+  }),
   handler: async (ctx, { campaniaId, cursor, ahora }) => {
     const p = await ctx.db
       .query("recompensas")
@@ -287,6 +295,10 @@ export const resumenPagina = internalQuery({
 
 export const resumenRecompensas = internalAction({
   args: { slug: v.string() },
+  returns: v.union(
+    v.null(),
+    v.object({ personas: v.number(), emitidos: v.number(), canjeados: v.number(), pendientes: v.number() }),
+  ),
   handler: async (ctx, { slug }) => {
     const campania = await ctx.runQuery(internal.recompensas.campania, { slug });
     if (!campania) return null;
