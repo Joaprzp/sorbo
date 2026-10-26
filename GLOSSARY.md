@@ -70,6 +70,9 @@ La promesa de la campaña: si una contribución aprobada cumple 89 días y la me
 **Meta**:
 El objetivo bruto en pesos de la campaña, elegido ya descontando el costo del cobro. Se muestra públicamente junto al recaudado y al número de contribuyentes. Completarla es un latch: una vez cumplida, la campaña se considera cumplida para siempre.
 
+**Presupuesto**:
+El desglose público de la meta por rubro (local, obra, salón, equipamiento, habilitaciones, apertura, tres meses de operación, imprevistos y costo del cobro). Vive en su propia pieza, `/jujuy/numeros`, y suma exactamente la meta.
+
 **Contribuyente**:
 Quien hace una contribución. Anónimo por defecto; si deja su email recibe novedades de la campaña — acreditación, devolución, meta cumplida. Distinto de la lista de espera: son intenciones distintas y no se mezclan.
 

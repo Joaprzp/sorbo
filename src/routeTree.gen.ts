@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as JujuyRouteImport } from './routes/jujuy'
 import { Route as JujuyAporteRouteImport } from './routes/jujuy_.aporte'
+import { Route as JujuyNumerosRouteImport } from './routes/jujuy_.numeros'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -28,35 +29,44 @@ const JujuyAporteRoute = JujuyAporteRouteImport.update({
   path: '/jujuy/aporte',
   getParentRoute: () => rootRouteImport,
 } as any)
+const JujuyNumerosRoute = JujuyNumerosRouteImport.update({
+  id: '/jujuy_/numeros',
+  path: '/jujuy/numeros',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/jujuy': typeof JujuyRoute
   '/jujuy/aporte': typeof JujuyAporteRoute
+  '/jujuy/numeros': typeof JujuyNumerosRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/jujuy': typeof JujuyRoute
   '/jujuy/aporte': typeof JujuyAporteRoute
+  '/jujuy/numeros': typeof JujuyNumerosRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/jujuy': typeof JujuyRoute
   '/jujuy_/aporte': typeof JujuyAporteRoute
+  '/jujuy_/numeros': typeof JujuyNumerosRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/jujuy' | '/jujuy/aporte'
+  fullPaths: '/' | '/jujuy' | '/jujuy/aporte' | '/jujuy/numeros'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/jujuy' | '/jujuy/aporte'
-  id: '__root__' | '/' | '/jujuy' | '/jujuy_/aporte'
+  to: '/' | '/jujuy' | '/jujuy/aporte' | '/jujuy/numeros'
+  id: '__root__' | '/' | '/jujuy' | '/jujuy_/aporte' | '/jujuy_/numeros'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   JujuyRoute: typeof JujuyRoute
   JujuyAporteRoute: typeof JujuyAporteRoute
+  JujuyNumerosRoute: typeof JujuyNumerosRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -82,6 +92,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof JujuyAporteRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/jujuy_/numeros': {
+      id: '/jujuy_/numeros'
+      path: '/jujuy/numeros'
+      fullPath: '/jujuy/numeros'
+      preLoaderRoute: typeof JujuyNumerosRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -89,6 +106,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   JujuyRoute: JujuyRoute,
   JujuyAporteRoute: JujuyAporteRoute,
+  JujuyNumerosRoute: JujuyNumerosRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

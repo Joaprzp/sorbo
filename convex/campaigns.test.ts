@@ -755,6 +755,43 @@ test("la meta cumplida hace latch y avisa a contribuyentes con email", async () 
   expect(mailMemoria.enviados).toContainEqual({ kind: "meta_cumplida", to: "c@d.com" });
 });
 
+test("fijarMeta mueve la meta de una campaña abierta", async () => {
+  const t = convexTest(schema, modules);
+  await campania(t);
+  await acreditar(t, 500_000);
+  await drenar(t);
+
+  await t.mutation(internal.contributionsInternal.fijarMeta, {
+    slug: "jujuy",
+    metaCentavos: 7_500_000_000,
+  });
+  const p = await t.query(api.campaigns.progreso, { slug: "jujuy" });
+  expect(p!.metaCentavos).toBe(7_500_000_000);
+  expect(p!.recaudadoNetoCentavos).toBe(500_000);
+
+  await expect(
+    t.mutation(internal.contributionsInternal.fijarMeta, { slug: "jujuy", metaCentavos: 500_000 }),
+  ).rejects.toThrow("META_INVALIDA");
+});
+
+test("fijarMeta no reabre una campaña cumplida", async () => {
+  const t = convexTest(schema, modules);
+  await t.run(async (ctx) => {
+    await ctx.db.insert("campaigns", {
+      slug: "jujuy",
+      metaCentavos: 500_000,
+      recaudadoNetoCentavos: 0,
+      contribuyentes: 0,
+    });
+  });
+  await acreditar(t, 500_000);
+  await drenar(t);
+
+  await expect(
+    t.mutation(internal.contributionsInternal.fijarMeta, { slug: "jujuy", metaCentavos: 7_500_000_000 }),
+  ).rejects.toThrow("CAMPANIA_CUMPLIDA");
+});
+
 // --- fixes del review ---
 
 test("hash ya acreditado por scan deja el intent en aprobada, sin duplicar", async () => {

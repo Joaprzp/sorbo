@@ -882,6 +882,22 @@ export const crearCampania = internalMutation({
   },
 });
 
+// Desde `bunx convex run`: mueve la meta de una campaña abierta. Cumplida es
+// latch — no se reabre; y una meta por debajo de lo recaudado la cumpliría
+// sin pasar por el aviso, así que se rechaza.
+export const fijarMeta = internalMutation({
+  args: { slug: v.string(), metaCentavos: v.number() },
+  handler: async (ctx, { slug, metaCentavos }) => {
+    const campania = await campaniaPorSlug(ctx, slug);
+    if (!campania) throw new Error("CAMPANIA_NO_EXISTE");
+    if (campania.cumplidaAt !== undefined) throw new Error("CAMPANIA_CUMPLIDA");
+    if (!Number.isInteger(metaCentavos) || metaCentavos <= campania.recaudadoNetoCentavos) {
+      throw new Error("META_INVALIDA");
+    }
+    await ctx.db.patch(campania._id, { metaCentavos });
+  },
+});
+
 export const porId = internalQuery({
   args: { id: v.id("contribuciones") },
   handler: async (ctx, { id }) => await ctx.db.get(id),

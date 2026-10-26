@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useAction, useQuery } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
-import { useNavigate } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import { encodeQR } from "qr";
 import { api } from "../../convex/_generated/api";
 import { Pieza } from "./pieza";
@@ -463,6 +463,12 @@ export function Jujuy() {
           <br />
           vuelve solo.
         </p>
+        <Link
+          to="/jujuy/numeros"
+          className="mt-6 inline-block font-mono text-[11px] uppercase tracking-[0.16em] text-azul underline-offset-4 hover:underline sm:text-xs"
+        >
+          En qué se usa la meta →
+        </Link>
       </section>
 
       {p === undefined ? (
