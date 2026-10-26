@@ -5,24 +5,18 @@ import type { GenericDatabaseReader, GenericDatabaseWriter } from "convex/server
 import type { DataModel, Doc, Id } from "./_generated/dataModel";
 import { resolvePorts, type RecompensaMail } from "./_lib/ports";
 import { fechaAR as fecha } from "../src/lib/format";
+import { recorrerPaginas } from "./_lib/paginas";
 import {
   cafesPorTotal,
   codigoCorto,
   estadoRecompensa,
+  estadoRecompensaV,
   vencimiento,
 } from "./_lib/recompensa";
 import { campaniaDoc } from "./schema";
 
 type Lector = { db: GenericDatabaseReader<DataModel> };
 type Escritor = { db: GenericDatabaseWriter<DataModel> };
-
-const estadoRecompensaV = v.union(
-  v.literal("reservado"),
-  v.literal("confirmado"),
-  v.literal("activo"),
-  v.literal("vencido"),
-  v.literal("anulado"),
-);
 
 const recompensaMail = v.object({
   codigo: v.string(),
@@ -70,12 +64,15 @@ export async function asegurarRecompensa(
   });
 }
 
-export async function saldoDe(ctx: Lector, r: Doc<"recompensas">, ahora: number) {
+// Los hechos del saldo, sin reloj: lo que una consulta puede devolver.
+export async function hechosDe(ctx: Lector, r: Doc<"recompensas">) {
   const campania = (await ctx.db.get(r.campaniaId))!;
+  // Solo las aprobadas: las pendientes o expiradas de ese email (que un
+  // tercero puede crear) no cuentan ni pesan en la lectura.
   const aportes = await ctx.db
     .query("contribuciones")
-    .withIndex("by_campania_email", (q) =>
-      q.eq("campaniaId", r.campaniaId).eq("email", r.email),
+    .withIndex("by_campania_email_estado", (q) =>
+      q.eq("campaniaId", r.campaniaId).eq("email", r.email).eq("estado", "aprobada"),
     )
     .collect();
   // Cuenta la plata que quedó: sin reclamos (la fila de la transfer ya suma),
@@ -83,7 +80,6 @@ export async function saldoDe(ctx: Lector, r: Doc<"recompensas">, ahora: number)
   const total = aportes
     .filter(
       (c) =>
-        c.estado === "aprobada" &&
         c.reclamoDe === undefined &&
         c.refundEstado !== "pendiente" &&
         (c.via === "mp" || c.avisoPrevio === true),
@@ -103,14 +99,14 @@ export async function saldoDe(ctx: Lector, r: Doc<"recompensas">, ahora: number)
     saldo: Math.max(0, cafes - canjeados),
     cumplida: campania.cumplidaAt !== undefined,
     aperturaAt: campania.aperturaAt,
-    estado: estadoRecompensa({
-      cafes,
-      cumplida: campania.cumplidaAt !== undefined,
-      aperturaAt: campania.aperturaAt,
-      ahora,
-    }),
     venceAt: campania.aperturaAt === undefined ? undefined : vencimiento(campania.aperturaAt),
   };
+}
+
+// Hechos más el estado a una hora dada: para mutaciones, mails y terminal.
+export async function saldoDe(ctx: Lector, r: Doc<"recompensas">, ahora: number) {
+  const h = await hechosDe(ctx, r);
+  return { ...h, estado: estadoRecompensa({ ...h, ahora }) };
 }
 
 
@@ -208,7 +204,11 @@ export const registrarAviso = internalMutation({
   args: { clave: v.string() },
   returns: v.null(),
   handler: async (ctx, { clave }) => {
-    await ctx.db.insert("avisosEnviados", { clave, at: Date.now() });
+    const ya = await ctx.db
+      .query("avisosEnviados")
+      .withIndex("by_clave", (q) => q.eq("clave", clave))
+      .first();
+    if (!ya) await ctx.db.insert("avisosEnviados", { clave, at: Date.now() });
     return null;
   },
 });
@@ -218,18 +218,14 @@ async function programarATodos(
   campaniaId: Id<"campaigns">,
   kind: Envio["kind"],
 ) {
-  let cursor: string | null = null;
-  for (;;) {
-    const p: { emails: string[]; isDone: boolean; continueCursor: string } = await ctx.runQuery(
-      internal.recompensas.pagina,
-      { campaniaId, cursor },
-    );
-    for (const email of p.emails) {
-      await ctx.scheduler.runAfter(0, internal.recompensas.enviarMail, { kind, campaniaId, email });
-    }
-    if (p.isDone) return;
-    cursor = p.continueCursor;
-  }
+  await recorrerPaginas(
+    (cursor) => ctx.runQuery(internal.recompensas.pagina, { campaniaId, cursor }),
+    async (p) => {
+      for (const email of p.emails) {
+        await ctx.scheduler.runAfter(0, internal.recompensas.enviarMail, { kind, campaniaId, email });
+      }
+    },
+  );
 }
 
 export const anunciarApertura = internalAction({
@@ -285,7 +281,7 @@ export const campania = internalQuery({
 });
 
 export const porEmail = internalQuery({
-  args: { slug: v.string(), email: v.string(), ahora: v.optional(v.number()) },
+  args: { slug: v.string(), email: v.string(), ahora: v.number() },
   returns: v.union(
     v.null(),
     v.object({
@@ -308,8 +304,7 @@ export const porEmail = internalQuery({
       .withIndex("by_campania_email", (q) => q.eq("campaniaId", campania._id).eq("email", email))
       .unique();
     if (!r) return null;
-    // Solo para terminal y tests: sin `ahora` el estado se calcula al momento.
-    return { codigo: r.codigo, qrId: r.qrId, ...(await saldoDe(ctx, r, ahora ?? Date.now())) };
+    return { codigo: r.codigo, qrId: r.qrId, ...(await saldoDe(ctx, r, ahora)) };
   },
 });
 

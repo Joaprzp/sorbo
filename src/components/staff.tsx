@@ -3,7 +3,8 @@ import { useConvex, useMutation, useQuery } from "convex/react";
 import { useNavigate } from "@tanstack/react-router";
 import { api } from "../../convex/_generated/api";
 import { Pieza } from "./pieza";
-import { claveDispositivo, guardarTokenStaff, tokenStaff, useAhora } from "../lib/staffSesion";
+import { claveDispositivo, guardarTokenStaff, tokenStaff } from "../lib/staffSesion";
+import { useAhora } from "../lib/reloj";
 import { fechaAR } from "../lib/format";
 
 const campo =
@@ -156,7 +157,8 @@ export function Staff() {
   const consulta = useQuery(api.staff.sesion, token ? { token } : "skip");
   const ahora = useAhora();
   // Vencida en el reloj de la página aunque la consulta no se haya re-corrido.
-  const sesion = consulta && consulta.venceAt > ahora ? consulta : consulta === undefined ? undefined : null;
+  const vencida = consulta && consulta.venceAt <= ahora;
+  const sesion = vencida ? null : consulta;
   const salir = () => {
     guardarTokenStaff(null);
     setToken(undefined);

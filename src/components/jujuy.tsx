@@ -6,6 +6,7 @@ import { encodeQR } from "qr";
 import { api } from "../../convex/_generated/api";
 import { Pieza } from "./pieza";
 import { ars, cafes } from "../lib/format";
+import { DEMASIADO_TRAFICO } from "../lib/errores";
 import {
   CAFE_EXTRA_CENTAVOS,
   MESES_DE_CANJE,
@@ -22,7 +23,7 @@ const errores: Record<string, string> = {
   MP_FALLO: "No pudimos hablar con Mercado Pago. Probá de nuevo.",
   MP_NO_CONFIGURADO: "Mercado Pago no está disponible ahora.",
   CAMPANIA_NO_EXISTE: "La campaña no está disponible.",
-  DEMASIADO_TRAFICO: "Hay mucho tráfico. Probá en un minuto.",
+  DEMASIADO_TRAFICO,
 };
 
 function mensajeError(e: unknown): string {

@@ -1,7 +1,7 @@
 import { v } from "convex/values";
 import { action, query } from "./_generated/server";
 import { internal } from "./_generated/api";
-import { estadoContribucion } from "./schema";
+import { estadoContribucion, viaContribucion } from "./schema";
 import { resolvePorts } from "./_lib/ports";
 import { CHAINS_SOPORTADAS, MIN_MP_CENTAVOS, MIN_USD_CENTS } from "./_lib/dominio";
 import { normalizarEmail } from "./_lib/recompensa";
@@ -110,12 +110,13 @@ export const contribuir = action({
       const email = args.via.email === undefined ? undefined : normalizarEmail(args.via.email);
       if (!CHAINS_SOPORTADAS.includes(chainId)) throw new Error("RED_NO_SOPORTADA");
       if (email !== undefined && !EMAIL_RE.test(email)) throw new Error("EMAIL_INVALIDO");
+      // Antes de crear la fila: una acción no revierte lo que ya escribió.
+      await frenar(ctx, txHash ? "verificarTx" : "contribuirCripto");
       const { id, token } = await ctx.runMutation(
         internal.contributionsInternal.crearPendienteCrypto,
         { slug: args.slug, chainId, email },
       );
       if (txHash) {
-        await frenar(ctx, "verificarTx");
         await ctx.runAction(internal.contributionsInternal.reclamarTx, { id, txHash });
       }
       return {
@@ -163,7 +164,7 @@ export const seguimiento = query({
     v.null(),
     v.object({
       estado: estadoContribucion,
-      via: v.union(v.literal("mp"), v.literal("crypto")),
+      via: viaContribucion,
       montoCentavos: v.optional(v.number()),
       aporteCentavos: v.optional(v.number()),
       acreditadaAt: v.optional(v.number()),

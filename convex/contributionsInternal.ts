@@ -1,7 +1,7 @@
 import { v } from "convex/values";
-import { internalAction, internalMutation, internalQuery } from "./_generated/server";
+import { internalAction, internalMutation, internalQuery, type MutationCtx } from "./_generated/server";
 import type { GenericDatabaseReader, GenericDatabaseWriter } from "convex/server";
-import type { DataModel, Id } from "./_generated/dataModel";
+import type { DataModel, Doc, Id } from "./_generated/dataModel";
 import { internal } from "./_generated/api";
 import { resolvePorts } from "./_lib/ports";
 import { ordenAcreditada, decisionExpiracion } from "./_lib/mpChecks";
@@ -11,6 +11,7 @@ import { ars } from "../src/lib/format";
 import { asegurarRecompensa } from "./recompensas";
 import { avisoAntesDelPago } from "./_lib/recompensa";
 import { campaniaDoc, contribucionDoc } from "./schema";
+import { recorrerPaginas } from "./_lib/paginas";
 
 type Lector = { db: GenericDatabaseReader<DataModel> };
 type Escritor = { db: GenericDatabaseWriter<DataModel> };
@@ -102,6 +103,49 @@ export const porMpOrderId = internalQuery({
 
 // La única transición a `aprobada`. Dueña de contadores, latch y mail.
 // Acepta desde pendiente y desde expirada: un pago tardío verificado es plata.
+// La única transición a `aprobada`: contadores, latch, recompensa y avisos.
+// Función y no solo mutación: el scan y el reclamo cripto la llaman dentro
+// de la misma transacción que crea o vincula la fila (sin ventana de crash).
+async function acreditarEn(
+  ctx: MutationCtx,
+  id: Id<"contribuciones">,
+  aporteCentavos: number,
+  ahora?: number,
+) {
+  const c = await ctx.db.get(id);
+  if (!c || (c.estado !== "pendiente" && c.estado !== "expirada")) return;
+  const t = ahora ?? Date.now();
+  await ctx.db.patch(id, { estado: "aprobada", aporteCentavos, acreditadaAt: t });
+  const campania = (await ctx.db.get(c.campaniaId))!;
+  const recaudado = campania.recaudadoNetoCentavos + aporteCentavos;
+  await ctx.db.patch(campania._id, {
+    recaudadoNetoCentavos: recaudado,
+    contribuyentes: campania.contribuyentes + 1,
+    cumplidaAt:
+      campania.cumplidaAt === undefined && recaudado >= campania.metaCentavos
+        ? t
+        : campania.cumplidaAt,
+  });
+  await evento(ctx, id, "acreditada", t, String(aporteCentavos));
+  if (c.email) await asegurarRecompensa(ctx, c.campaniaId, c.email);
+  await ctx.scheduler.runAfter(0, internal.contributionsInternal.avisarAdmin, {
+    kind: "aporte",
+    contribucionId: id,
+  });
+  if (c.email) {
+    await ctx.scheduler.runAfter(0, internal.contributionsInternal.enviarNotificacion, {
+      contribucionId: id,
+      kind: "acreditacion",
+    });
+  }
+  if (recaudado >= campania.metaCentavos && campania.cumplidaAt === undefined) {
+    await ctx.scheduler.runAfter(0, internal.contributionsInternal.anunciarMetaCumplida, {
+      campaniaId: campania._id,
+      metaCentavos: campania.metaCentavos,
+    });
+  }
+}
+
 export const acreditar = internalMutation({
   args: {
     id: v.id("contribuciones"),
@@ -110,43 +154,7 @@ export const acreditar = internalMutation({
   },
   returns: v.null(),
   handler: async (ctx, args) => {
-    const c = await ctx.db.get(args.id);
-    if (!c || (c.estado !== "pendiente" && c.estado !== "expirada")) return null;
-    const t = args.ahora ?? Date.now();
-    await ctx.db.patch(args.id, {
-      estado: "aprobada",
-      aporteCentavos: args.aporteCentavos,
-      acreditadaAt: t,
-    });
-    const campania = (await ctx.db.get(c.campaniaId))!;
-    const recaudado = campania.recaudadoNetoCentavos + args.aporteCentavos;
-    await ctx.db.patch(campania._id, {
-      recaudadoNetoCentavos: recaudado,
-      contribuyentes: campania.contribuyentes + 1,
-      cumplidaAt:
-        campania.cumplidaAt === undefined && recaudado >= campania.metaCentavos
-          ? t
-          : campania.cumplidaAt,
-    });
-    await evento(ctx, args.id, "acreditada", t, String(args.aporteCentavos));
-    if (c.email) await asegurarRecompensa(ctx, c.campaniaId, c.email);
-    await ctx.scheduler.runAfter(0, internal.contributionsInternal.avisarAdmin, {
-      kind: "aporte",
-      contribucionId: args.id,
-    });
-    if (c.email) {
-      await ctx.scheduler.runAfter(0, internal.contributionsInternal.enviarNotificacion, {
-        contribucionId: args.id,
-        kind: "acreditacion",
-      });
-    }
-    if (recaudado >= campania.metaCentavos && campania.cumplidaAt === undefined) {
-      await ctx.scheduler.runAfter(
-        0,
-        internal.contributionsInternal.anunciarMetaCumplida,
-        { campaniaId: campania._id, metaCentavos: campania.metaCentavos },
-      );
-    }
+    await acreditarEn(ctx, args.id, args.aporteCentavos, args.ahora);
     return null;
   },
 });
@@ -180,25 +188,21 @@ export const anunciarMetaCumplida = internalAction({
     if (ports.mail) {
       // Un mail por acción programada: uno que falla no frena al resto.
       const vistos = new Set<string>();
-      let cursor: string | null = null;
-      for (;;) {
-        const pagina: { emails: string[]; isDone: boolean; continueCursor: string } =
-          await ctx.runQuery(internal.contributionsInternal.contribuyentesConEmail, {
-            campaniaId,
-            cursor,
-          });
-        for (const to of pagina.emails) {
-          if (vistos.has(to)) continue;
-          vistos.add(to);
-          await ctx.scheduler.runAfter(0, internal.recompensas.enviarMail, {
-            kind: "meta_cumplida",
-            campaniaId,
-            email: to,
-          });
-        }
-        if (pagina.isDone) break;
-        cursor = pagina.continueCursor;
-      }
+      await recorrerPaginas(
+        (cursor) =>
+          ctx.runQuery(internal.contributionsInternal.contribuyentesConEmail, { campaniaId, cursor }),
+        async (pagina) => {
+          for (const to of pagina.emails) {
+            if (vistos.has(to)) continue;
+            vistos.add(to);
+            await ctx.scheduler.runAfter(0, internal.recompensas.enviarMail, {
+              kind: "meta_cumplida",
+              campaniaId,
+              email: to,
+            });
+          }
+        },
+      );
     }
     if (metaCentavos !== undefined) {
       try {
@@ -257,7 +261,7 @@ export const pendientesMp = internalQuery({
       .withIndex("by_devolucion", (q) =>
         q.eq("via", "mp").eq("estado", "pendiente"),
       )
-      .collect();
+      .take(200);
   },
 });
 
@@ -272,8 +276,13 @@ export const barrerExpiracionMp = internalAction({
     const pendientes = (await ctx.runQuery(
       internal.contributionsInternal.pendientesMp,
       {},
-    )).filter((c) => ahora - c.createdAt > VENTANA_EXPIRACION_MS && c.mpOrderId);
+    )).filter((c) => ahora - c.createdAt > VENTANA_EXPIRACION_MS);
     for (const c of pendientes) {
+      // La acción se cayó antes de crear la orden en MP: no hay nada que cobrar.
+      if (!c.mpOrderId) {
+        await ctx.runMutation(internal.contributionsInternal.expirar, { id: c._id });
+        continue;
+      }
       try {
         const orden = await ports.mp.getOrder(c.mpOrderId!);
         const d = decisionExpiracion(orden);
@@ -396,29 +405,24 @@ export const devolucionesDiarias = internalAction({
   handler: async (ctx, args) => {
     const ahora = args.ahora ?? Date.now();
     if (!(await ctx.runQuery(internal.contributionsInternal.hayCampaniaAbierta, {}))) return null;
-    let cursor: string | null = null;
-    for (;;) {
-      const pagina: { ids: Id<"contribuciones">[]; isDone: boolean; continueCursor: string } =
-        await ctx.runQuery(internal.contributionsInternal.aprobadasParaDevolucion, {
+    await recorrerPaginas(
+      (cursor) =>
+        ctx.runQuery(internal.contributionsInternal.aprobadasParaDevolucion, {
           antesDe: ahora - VENTANA_DEVOLUCION_MS,
           cursor,
-        });
-      for (const id of pagina.ids) {
-        const marcada = await ctx.runMutation(
-          internal.contributionsInternal.marcarReembolsoPendiente,
-          { id },
-        );
-        if (marcada) {
-          await ctx.scheduler.runAfter(
-            0,
-            internal.contributionsInternal.ejecutarReembolso,
+        }),
+      async (pagina) => {
+        for (const id of pagina.ids) {
+          const marcada = await ctx.runMutation(
+            internal.contributionsInternal.marcarReembolsoPendiente,
             { id },
           );
+          if (marcada) {
+            await ctx.scheduler.runAfter(0, internal.contributionsInternal.ejecutarReembolso, { id });
+          }
         }
-      }
-      if (pagina.isDone) break;
-      cursor = pagina.continueCursor;
-    }
+      },
+    );
     return null;
   },
 });
@@ -532,7 +536,6 @@ export const reclamarTx = internalAction({
         await ctx.runMutation(internal.contributionsInternal.vincularReclamo, {
           id,
           existenteId: existente._id,
-          aporteCentavos: existente.aporteCentavos ?? 0,
         });
       }
       return null;
@@ -557,50 +560,49 @@ export const reclamarTx = internalAction({
       usdCents: tx.usdCents,
       mepCentavosPorUsd: mep,
       blockAt: tx.blockAt,
-    });
-    await ctx.runMutation(internal.contributionsInternal.acreditar, {
-      id,
       aporteCentavos: centavosPorUsd(tx.usdCents, mep),
     });
     return null;
   },
 });
 
-export const vincularReclamo = internalMutation({
-  args: {
-    id: v.id("contribuciones"),
-    existenteId: v.id("contribuciones"),
-    aporteCentavos: v.number(),
-  },
-  returns: v.null(),
-  handler: async (ctx, args) => {
-    const c = await ctx.db.get(args.id);
-    if (!c || c.estado !== "pendiente") return null;
-    await ctx.db.patch(args.id, {
-      estado: "aprobada",
-      aporteCentavos: args.aporteCentavos,
-      acreditadaAt: Date.now(),
-      reclamoDe: args.existenteId,
+// Reclamo de una transfer que ya está acreditada en otra fila: el intent
+// queda aprobado para mostrar su estado, sin volver a sumar la plata.
+async function reclamoEn(
+  ctx: MutationCtx,
+  c: Doc<"contribuciones">,
+  existente: Doc<"contribuciones">,
+) {
+  const ahora = Date.now();
+  await ctx.db.patch(c._id, {
+    estado: "aprobada",
+    aporteCentavos: existente.aporteCentavos ?? 0,
+    acreditadaAt: ahora,
+    reclamoDe: existente._id,
+  });
+  await evento(ctx, c._id, "reclamo_ya_acreditado", ahora);
+  // Los cafés van con la plata: el primer reclamo le da su email a la fila
+  // de la transfer; uno posterior de la misma transfer no suma cafés.
+  if (c.email && !existente.email && avisoAntesDelPago(c.createdAt, existente.blockAt)) {
+    await ctx.db.patch(existente._id, { email: c.email, avisoPrevio: true });
+    await asegurarRecompensa(ctx, c.campaniaId, c.email);
+  }
+  if (c.email) {
+    await ctx.scheduler.runAfter(0, internal.contributionsInternal.enviarNotificacion, {
+      contribucionId: c._id,
+      kind: "acreditacion",
     });
-    await evento(ctx, args.id, "reclamo_ya_acreditado", Date.now());
-    // Los cafés van con la plata: el primer reclamo le da su email a la fila
-    // de la transfer; uno posterior de la misma transfer no suma cafés.
-    const existente = await ctx.db.get(args.existenteId);
-    if (
-      c.email &&
-      existente &&
-      !existente.email &&
-      avisoAntesDelPago(c.createdAt, existente.blockAt)
-    ) {
-      await ctx.db.patch(existente._id, { email: c.email, avisoPrevio: true });
-      await asegurarRecompensa(ctx, c.campaniaId, c.email);
-    }
-    if (c.email) {
-      await ctx.scheduler.runAfter(0, internal.contributionsInternal.enviarNotificacion, {
-        contribucionId: args.id,
-        kind: "acreditacion",
-      });
-    }
+  }
+}
+
+export const vincularReclamo = internalMutation({
+  args: { id: v.id("contribuciones"), existenteId: v.id("contribuciones") },
+  returns: v.null(),
+  handler: async (ctx, { id, existenteId }) => {
+    const c = await ctx.db.get(id);
+    const existente = await ctx.db.get(existenteId);
+    if (!c || c.estado !== "pendiente" || !existente) return null;
+    await reclamoEn(ctx, c, existente);
     return null;
   },
 });
@@ -613,11 +615,22 @@ export const vincularTx = internalMutation({
     usdCents: v.number(),
     mepCentavosPorUsd: v.number(),
     blockAt: v.optional(v.number()),
+    aporteCentavos: v.number(),
   },
   returns: v.null(),
+  // Una sola transacción: si el scan acreditó el mismo hash mientras se
+  // verificaba on-chain, esto lo ve y queda como reclamo (nunca dos filas).
   handler: async (ctx, args) => {
     const c = await ctx.db.get(args.id);
     if (!c || c.estado !== "pendiente") return null;
+    const otra = await ctx.db
+      .query("contribuciones")
+      .withIndex("by_txHash", (q) => q.eq("txHash", args.txHash))
+      .first();
+    if (otra && otra._id !== c._id) {
+      if (otra.estado === "aprobada") await reclamoEn(ctx, c, otra);
+      return null;
+    }
     await ctx.db.patch(args.id, {
       txHash: args.txHash,
       chain: args.chain,
@@ -626,6 +639,7 @@ export const vincularTx = internalMutation({
       blockAt: args.blockAt,
       avisoPrevio: avisoAntesDelPago(c.createdAt, args.blockAt),
     });
+    await acreditarEn(ctx, c._id, args.aporteCentavos);
     return null;
   },
 });
@@ -639,15 +653,19 @@ export const crearObservadaCrypto = internalMutation({
     usdCents: v.number(),
     mepCentavosPorUsd: v.number(),
     blockAt: v.optional(v.number()),
+    aporteCentavos: v.number(),
   },
   returns: v.union(v.null(), v.id("contribuciones")),
+  // Crear y acreditar en la misma transacción: si la acción se caía entre
+  // las dos, la fila quedaba pendiente y la dedupe por hash no la retomaba.
   handler: async (ctx, args) => {
-    if (
-      await ctx.db
-        .query("contribuciones")
-        .withIndex("by_txHash", (q) => q.eq("txHash", args.txHash))
-        .first()
-    ) {
+    const previa = await ctx.db
+      .query("contribuciones")
+      .withIndex("by_txHash", (q) => q.eq("txHash", args.txHash))
+      .first();
+    if (previa) {
+      // Fila de un crash anterior: se acredita ahora.
+      if (previa.estado === "pendiente") await acreditarEn(ctx, previa._id, args.aporteCentavos);
       return null;
     }
     const campania = await campaniaPorSlug(ctx, args.slug);
@@ -666,6 +684,7 @@ export const crearObservadaCrypto = internalMutation({
       createdAt: ahora,
     });
     await evento(ctx, id, "observada", ahora, args.txHash);
+    await acreditarEn(ctx, id, args.aporteCentavos);
     return id;
   },
 });
@@ -715,7 +734,7 @@ export const escanearCrypto = internalAction({
               continue;
             }
             mep ??= await ports.fx.mepCentavosPorUsd();
-            const id = await ctx.runMutation(
+            await ctx.runMutation(
               internal.contributionsInternal.crearObservadaCrypto,
               {
                 slug: "jujuy",
@@ -724,14 +743,9 @@ export const escanearCrypto = internalAction({
                 usdCents: tx.usdCents,
                 mepCentavosPorUsd: mep,
                 blockAt: tx.blockAt,
+                aporteCentavos: centavosPorUsd(tx.usdCents, mep),
               },
             );
-            if (id) {
-              await ctx.runMutation(internal.contributionsInternal.acreditar, {
-                id,
-                aporteCentavos: centavosPorUsd(tx.usdCents, mep),
-              });
-            }
           }
           cursor = res.cursor;
         } while (cursor && ++paginas < 20);
@@ -764,7 +778,7 @@ export const reembolsosEstancados = internalQuery({
     const rows = await ctx.db
       .query("contribuciones")
       .withIndex("by_refund", (q) => q.eq("refundEstado", "pendiente").eq("via", "mp"))
-      .collect();
+      .take(200);
     return rows.filter(
       (c) =>
         c.estado === "aprobada" &&
@@ -817,7 +831,7 @@ export const reembolsosAgotados = internalQuery({
     const rows = await ctx.db
       .query("contribuciones")
       .withIndex("by_refund", (q) => q.eq("refundEstado", "pendiente").eq("via", "mp"))
-      .collect();
+      .take(200);
     return rows.filter((c) => c.estado === "aprobada" && (c.refundIntentos ?? 0) >= 3);
   },
 });

@@ -4,6 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation } from "convex/react";
 import { z } from "zod";
 import { api } from "../../convex/_generated/api";
+import { DEMASIADO_TRAFICO } from "../lib/errores";
 
 const schema = z.object({
   email: z.email("Ese email no parece válido"),
@@ -38,7 +39,7 @@ export function WaitlistForm() {
       const msg = e instanceof Error ? e.message : "";
       setError("email", {
         message: msg.includes("DEMASIADO_TRAFICO")
-          ? "Hay mucho tráfico. Probá en un minuto."
+          ? DEMASIADO_TRAFICO
           : "No pudimos anotarte. Probá de nuevo.",
       });
     }

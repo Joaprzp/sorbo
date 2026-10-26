@@ -5,17 +5,21 @@ import { components } from "./_generated/api";
 // Topes globales de las funciones públicas: Convex no expone la IP, así que
 // no hay clave por visitante. Cubren las cuotas que pagamos (Alchemy, MP) y la
 // base; están lejos del tráfico real de una campaña chica.
-const limites = new RateLimiter(components.rateLimiter, {
+const config = {
   // Crea una orden en MP.
   contribuirMp: { kind: "token bucket", rate: 60, period: MINUTE, capacity: 30 },
+  // Aviso cripto: una fila por llamada.
+  contribuirCripto: { kind: "token bucket", rate: 30, period: MINUTE, capacity: 15 },
   // Cada hash dispara getTx en las 7 redes.
   verificarTx: { kind: "token bucket", rate: 20, period: MINUTE, capacity: 10 },
   // Vuelta de MP: un GET a MP por llamada.
   reconciliar: { kind: "token bucket", rate: 120, period: MINUTE, capacity: 60 },
   listaDeEspera: { kind: "token bucket", rate: 30, period: MINUTE, capacity: 20 },
-});
+} as const;
 
-export type Limite = "contribuirMp" | "verificarTx" | "reconciliar" | "listaDeEspera";
+const limites = new RateLimiter(components.rateLimiter, config);
+
+type Limite = keyof typeof config;
 
 export async function frenar(ctx: ActionCtx | MutationCtx, nombre: Limite) {
   const { ok } = await limites.limit(ctx, nombre);

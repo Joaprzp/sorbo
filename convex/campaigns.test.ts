@@ -876,7 +876,7 @@ test("refund marcado antes del latch no se ejecuta después", async () => {
 // --- recompensa en café (ADR-0008) ---
 
 async function recompensaDe(t: ReturnType<typeof convexTest>, email: string) {
-  return await t.query(internal.recompensas.porEmail, { slug: "jujuy", email });
+  return await t.query(internal.recompensas.porEmail, { slug: "jujuy", email, ahora: Date.now() });
 }
 
 test("recompensa: se suma por email y aplica la regla sobre el total", async () => {
@@ -987,7 +987,7 @@ async function conApertura(t: ReturnType<typeof convexTest>, email = "s@s.com", 
   await drenar(t);
   await t.mutation(internal.recompensas.fijarApertura, { slug: "jujuy", aperturaAt: Date.now() - 1000 });
   await drenar(t);
-  const r = await t.query(internal.recompensas.porEmail, { slug: "jujuy", email });
+  const r = await t.query(internal.recompensas.porEmail, { slug: "jujuy", email, ahora: Date.now() });
   return r!;
 }
 
@@ -1052,7 +1052,7 @@ test("canje: sin sesión, revocada o antes de la apertura no se puede", async ()
   const t = nuevoTest();
   await campania(t); // meta lejos: sin apertura posible
   await acreditar(t, 500_000, { email: "z@z.com" });
-  const r = (await t.query(internal.recompensas.porEmail, { slug: "jujuy", email: "z@z.com" }))!;
+  const r = (await t.query(internal.recompensas.porEmail, { slug: "jujuy", email: "z@z.com", ahora: Date.now() }))!;
   const token = await sesionStaff(t);
   await expect(t.mutation(api.staff.canjear, { qrId: r.qrId, cantidad: 1, token })).rejects.toThrow("NO_ACTIVO");
   await expect(
@@ -1285,4 +1285,50 @@ test("staff: con PIN de 5, 5 fallidos en el día traban los ingresos nuevos hast
   const r = await t.mutation(api.staff.ingresar, { pin: "48219", nombre: "x", clave: "nueva" });
   expect(r.token).toBeDefined();
   process.env.STAFF_PIN = "482193";
+});
+
+test("cripto: si el scan acreditó el hash mientras se verificaba, no cuenta doble", async () => {
+  const t = nuevoTest();
+  await campania(t);
+  setPortsForTesting(puertos(null));
+  const intent = await t.run(async (ctx) => {
+    const camp = (await ctx.db.query("campaigns").first())!;
+    return await ctx.db.insert("contribuciones", {
+      campaniaId: camp._id, token: "tk", via: "crypto", estado: "pendiente", email: "x@x.com", createdAt: Date.now(),
+    });
+  });
+  // El scan gana la carrera y acredita la transfer.
+  await t.mutation(internal.contributionsInternal.crearObservadaCrypto, {
+    slug: "jujuy", chain: "base", txHash: "0xcarrera", usdCents: 1000, mepCentavosPorUsd: 120000,
+    blockAt: Date.now() + 60_000, aporteCentavos: 1_200_000,
+  });
+  // Llega tarde la vinculación del reclamo con el mismo hash.
+  await t.mutation(internal.contributionsInternal.vincularTx, {
+    id: intent, txHash: "0xcarrera", chain: "base", usdCents: 1000, mepCentavosPorUsd: 120000,
+    blockAt: Date.now() + 60_000, aporteCentavos: 1_200_000,
+  });
+  await drenar(t);
+  const p = await t.query(api.campaigns.progreso, { slug: "jujuy" });
+  expect(p).toMatchObject({ recaudadoNetoCentavos: 1_200_000, contribuyentes: 1 });
+  const conHash = await t.run((ctx) =>
+    ctx.db.query("contribuciones").withIndex("by_txHash", (q) => q.eq("txHash", "0xcarrera")).collect(),
+  );
+  expect(conHash).toHaveLength(1);
+});
+
+test("cripto: una fila observada que quedó pendiente por un crash se acredita en el scan siguiente", async () => {
+  const t = nuevoTest();
+  await campania(t);
+  setPortsForTesting(puertos(null));
+  await t.run(async (ctx) => {
+    const camp = (await ctx.db.query("campaigns").first())!;
+    await ctx.db.insert("contribuciones", {
+      campaniaId: camp._id, token: "tk2", via: "crypto", estado: "pendiente", txHash: "0xcrash", createdAt: Date.now(),
+    });
+  });
+  await t.mutation(internal.contributionsInternal.crearObservadaCrypto, {
+    slug: "jujuy", chain: "base", txHash: "0xcrash", usdCents: 1000, mepCentavosPorUsd: 120000, aporteCentavos: 1_200_000,
+  });
+  await drenar(t);
+  expect((await t.query(api.campaigns.progreso, { slug: "jujuy" }))!.recaudadoNetoCentavos).toBe(1_200_000);
 });

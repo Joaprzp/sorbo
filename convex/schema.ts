@@ -1,6 +1,8 @@
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 
+export const viaContribucion = v.union(v.literal("mp"), v.literal("crypto"));
+
 export const estadoContribucion = v.union(
   v.literal("pendiente"),
   v.literal("aprobada"),
@@ -20,7 +22,7 @@ const campaniaCampos = {
 const contribucionCampos = {
   campaniaId: v.id("campaigns"),
   token: v.string(),
-  via: v.union(v.literal("mp"), v.literal("crypto")),
+  via: viaContribucion,
   estado: estadoContribucion,
   montoCentavos: v.optional(v.number()),
   aporteCentavos: v.optional(v.number()),
@@ -74,6 +76,7 @@ export default defineSchema({
     .index("by_txHash", ["txHash"])
     .index("by_devolucion", ["via", "estado", "acreditadaAt"])
     .index("by_campania_email", ["campaniaId", "email"])
+    .index("by_campania_email_estado", ["campaniaId", "email", "estado"])
     .index("by_refund", ["refundEstado", "via"]),
 
   // ADR-0008: una fila por persona y campaña. Los cafés no se guardan: salen
@@ -95,7 +98,9 @@ export default defineSchema({
     creadoAt: v.number(),
     venceAt: v.number(),
     revocadoAt: v.optional(v.number()),
-  }).index("by_tokenHash", ["tokenHash"]),
+  })
+    .index("by_tokenHash", ["tokenHash"])
+    .index("by_nombre", ["nombre"]),
 
   // Bloqueo por PIN: una fila por dispositivo ("disp:<clave>") y una global.
   intentosPin: defineTable({
@@ -113,14 +118,14 @@ export default defineSchema({
     deshechoAt: v.optional(v.number()),
   }).index("by_recompensa", ["recompensaId"]),
 
-  // Dedupe de avisos push al admin (un txHash rechazado se re-escanea cada
-  // corrida dentro de la ventana — sin esto son ~2000 notificaciones).
   // Mails al contribuyente que van una sola vez (aviso de vencimiento).
   avisosEnviados: defineTable({
     clave: v.string(),
     at: v.number(),
   }).index("by_clave", ["clave"]),
 
+  // Dedupe de avisos push al admin (un txHash rechazado se re-escanea cada
+  // corrida dentro de la ventana — sin esto son ~2000 notificaciones).
   avisosAdmin: defineTable({
     clave: v.string(),
     at: v.number(),

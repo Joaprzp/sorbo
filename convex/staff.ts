@@ -3,8 +3,9 @@ import { internalAction, internalMutation, internalQuery, mutation, query } from
 import type { GenericDatabaseReader, GenericDatabaseWriter } from "convex/server";
 import type { DataModel, Doc } from "./_generated/dataModel";
 import { internal } from "./_generated/api";
-import { saldoDe } from "./recompensas";
+import { hechosDe, saldoDe } from "./recompensas";
 import { DESHACER_MS } from "./_lib/recompensa";
+import { recorrerPaginas } from "./_lib/paginas";
 
 // ADR-0008: el staff del local entra con un PIN por dispositivo y canjea cafés.
 
@@ -15,13 +16,12 @@ const MIN = 60 * 1000;
 const SESION_MS = 90 * 24 * 60 * MIN;
 // La clave del dispositivo la manda el cliente: frena al que se equivoca
 // (5 fallidos → 15 min), no a un atacante que la rota. Contra ese, el tope
-// global: 5 fallidos por día → 24 h de bloqueo; un PIN de 5 dígitos
-// (100.000) lleva décadas. El costo: 5 errores traban los ingresos nuevos un
+// global: 5 fallidos por día → 24 h de bloqueo; un PIN de 5 caracteres
+// (100.000 combinaciones si son dígitos) lleva décadas. El costo: 5 errores traban los ingresos nuevos un
 // día (desbloquearPin lo levanta); las sesiones abiertas (90 días) siguen.
-const DISPOSITIVO = { umbral: 5, ventanaMs: 15 * MIN };
-const GLOBAL = { umbral: 5, ventanaMs: 24 * 60 * MIN };
+const TOPE_DISPOSITIVO = { umbral: 5, ventanaMs: 15 * MIN };
+const TOPE_GLOBAL = { umbral: 5, ventanaMs: 24 * 60 * MIN };
 const PIN_MINIMO = 5;
-
 
 async function sha256(texto: string): Promise<string> {
   const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(texto));
@@ -107,13 +107,13 @@ export const ingresar = mutation({
       if (f?.bloqueadoHasta && f.bloqueadoHasta > ahora) return { error: "PIN_BLOQUEADO" as const };
     }
     if (!mismoPin(pin, esperado)) {
-      const bloqueoDisp = await registrarFallo(ctx, claveDisp, DISPOSITIVO, ahora);
-      const bloqueoGlobal = await registrarFallo(ctx, "global", GLOBAL, ahora);
+      const bloqueoDisp = await registrarFallo(ctx, claveDisp, TOPE_DISPOSITIVO, ahora);
+      const bloqueoGlobal = await registrarFallo(ctx, "global", TOPE_GLOBAL, ahora);
       if (bloqueoDisp || bloqueoGlobal) {
         await ctx.scheduler.runAfter(0, internal.contributionsInternal.avisarAdmin, {
           kind: "staff_bloqueado",
           detalle: bloqueoGlobal
-            ? `${GLOBAL.umbral} PIN incorrectos hoy · ingresos bloqueados 24 h · desbloquearPin para levantarlo`
+            ? `${TOPE_GLOBAL.umbral} PIN incorrectos hoy · ingresos bloqueados 24 h · desbloquearPin para levantarlo`
             : `"${nombreLimpio}" bloqueado 15 min por PIN incorrecto`,
         });
       }
@@ -177,7 +177,7 @@ export const ver = query({
     if (!r) return null;
     // Hechos, no estado: el cliente calcula reservado/activo/vencido con su
     // reloj (estadoRecompensa); el canje lo vuelve a validar el servidor.
-    const s = await saldoDe(ctx, r, 0);
+    const s = await hechosDe(ctx, r);
     const publico = {
       saldo: s.saldo,
       cafes: s.cafes,
@@ -276,8 +276,11 @@ export const revocarDispositivo = internalMutation({
   args: { nombre: v.string() },
   returns: v.number(),
   handler: async (ctx, { nombre }) => {
-    const todos = await ctx.db.query("dispositivos").collect();
-    const activos = todos.filter((d) => d.nombre === nombre && d.revocadoAt === undefined);
+    const conNombre = await ctx.db
+      .query("dispositivos")
+      .withIndex("by_nombre", (q) => q.eq("nombre", nombre))
+      .take(100);
+    const activos = conNombre.filter((d) => d.revocadoAt === undefined);
     for (const d of activos) await ctx.db.patch(d._id, { revocadoAt: Date.now() });
     return activos.length;
   },
@@ -319,20 +322,16 @@ export const resumenRecompensas = internalAction({
     const campania = await ctx.runQuery(internal.recompensas.campania, { slug });
     if (!campania) return null;
     const total = { personas: 0, emitidos: 0, canjeados: 0 };
-    let cursor: string | null = null;
-    for (;;) {
-      const p: { personas: number; emitidos: number; canjeados: number; isDone: boolean; continueCursor: string } =
-        await ctx.runQuery(internal.staff.resumenPagina, {
-          campaniaId: campania._id,
-          cursor,
-          ahora: Date.now(),
-        });
-      total.personas += p.personas;
-      total.emitidos += p.emitidos;
-      total.canjeados += p.canjeados;
-      if (p.isDone) break;
-      cursor = p.continueCursor;
-    }
+    const ahora = Date.now();
+    await recorrerPaginas(
+      (cursor) =>
+        ctx.runQuery(internal.staff.resumenPagina, { campaniaId: campania._id, cursor, ahora }),
+      async (p) => {
+        total.personas += p.personas;
+        total.emitidos += p.emitidos;
+        total.canjeados += p.canjeados;
+      },
+    );
     return { ...total, pendientes: total.emitidos - total.canjeados };
   },
 });

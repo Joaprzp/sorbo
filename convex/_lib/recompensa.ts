@@ -1,4 +1,5 @@
-// Recompensa en café (ADR-0008) — reglas puras, sin Convex.
+// Recompensa en café (ADR-0008) — reglas puras, sin acceso a la base.
+import { v, type Infer } from "convex/values";
 
 // Exportadas para que /jujuy muestre la misma regla que se calcula.
 export const PRIMER_CAFE_CENTAVOS = 500_000; // $5.000
@@ -50,12 +51,14 @@ export function vencimiento(aperturaAt: number): number {
   return d.getTime() - ART_OFFSET_MS;
 }
 
-export type EstadoRecompensa =
-  | "reservado" // la meta todavía no se cumplió
-  | "confirmado" // meta cumplida, falta la apertura
-  | "activo" // se puede canjear
-  | "vencido"
-  | "anulado"; // sus aportes se devolvieron
+export const estadoRecompensaV = v.union(
+  v.literal("reservado"), // la meta todavía no se cumplió
+  v.literal("confirmado"), // meta cumplida, falta la apertura
+  v.literal("activo"), // se puede canjear
+  v.literal("vencido"),
+  v.literal("anulado"), // sus aportes se devolvieron
+);
+export type EstadoRecompensa = Infer<typeof estadoRecompensaV>;
 
 export function estadoRecompensa(args: {
   cafes: number;

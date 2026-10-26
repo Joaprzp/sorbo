@@ -77,7 +77,7 @@ El desglose público de la meta por rubro (local, obra, salón, equipamiento, ha
 Quien hace una contribución. Anónimo por defecto; si deja su email recibe novedades de la campaña — acreditación, devolución, meta cumplida, apertura — y su recompensa. Distinto de la lista de espera: son intenciones distintas y no se mezclan.
 
 **Recompensa**:
-Los cafés que devuelve un aporte con email (ADR-0008): $5.000 da 1 café y cada $10.000 más suma 1, con tope de 10 por persona. Se calcula por email sobre la suma de sus aportes aprobados, así que una devolución la baja sola. Todos los cafés de la carta, durante los 6 meses siguientes a la **Apertura**. Nada más: sin eventos ni nombres en la pared.
+Los cafés que devuelve un aporte con email (ADR-0008): $5.000 da 1 café y cada $10.000 más suma 1, con tope de 10 por persona. Se calcula por email sobre la suma de sus aportes aprobados, así que una devolución la baja sola. Un aporte cripto cuenta solo si el aviso con email se dejó antes del pago: el hash es público y cualquiera podría reclamar una transfer ajena. Todos los cafés de la carta, durante los 6 meses siguientes a la **Apertura**. Nada más: sin eventos ni nombres en la pared.
 _Avoid_: tier, premio, beneficio.
 
 **Saldo**:

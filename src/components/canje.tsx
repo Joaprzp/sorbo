@@ -1,10 +1,12 @@
 import { useState } from "react";
 import { useMutation, useQuery } from "convex/react";
+import type { FunctionReturnType } from "convex/server";
 import { Link } from "@tanstack/react-router";
 import type { Id } from "../../convex/_generated/dataModel";
 import { api } from "../../convex/_generated/api";
 import { Pieza } from "./pieza";
-import { tokenStaff, useAhora } from "../lib/staffSesion";
+import { tokenStaff } from "../lib/staffSesion";
+import { useAhora } from "../lib/reloj";
 import { cafes as cafesN, fechaAR } from "../lib/format";
 import { DESHACER_MS, estadoRecompensa, type EstadoRecompensa } from "../../convex/_lib/recompensa";
 
@@ -123,7 +125,6 @@ export function Canje({ qrId }: { qrId: string }) {
   const token = tokenStaff();
   const r = useQuery(api.staff.ver, { qrId, token });
   const ahora = useAhora();
-  const estado = r ? estadoRecompensa({ cafes: r.cafes, cumplida: r.cumplida, aperturaAt: r.aperturaAt, ahora }) : null;
   return (
     <Pieza
       lado={
@@ -143,31 +144,48 @@ export function Canje({ qrId }: { qrId: string }) {
             Ese código no existe.
           </p>
         ) : (
-          <>
-            <h1 className="text-[clamp(2rem,8vw,6.5rem)] font-bold uppercase leading-[0.98]">
-              {cafes(r.saldo)}.
-            </h1>
-            <p className="mt-8 max-w-2xl text-xs uppercase leading-loose tracking-[0.17em] sm:text-base">
-              {bajada(estado!, r.venceAt)}
-            </p>
-            <dl className="mt-10 border-t border-azul/40">
-              <div className={fila}>
-                <dt>Recompensa</dt>
-                <dd className="text-azul">{cafes(r.cafes)}</dd>
-              </div>
-              {r.staff && (
-                <div className={fila}>
-                  <dt>Código</dt>
-                  <dd className="text-azul">{r.staff.codigo}</dd>
-                </div>
-              )}
-            </dl>
-            {r.staff && token && estado === "activo" && (
-              <Mostrador qrId={qrId} saldo={r.saldo} canjes={r.staff.canjes} token={token} />
-            )}
-          </>
+          <Saldo r={r} token={token} qrId={qrId} ahora={ahora} />
         )}
       </section>
     </Pieza>
+  );
+}
+
+function Saldo({
+  r,
+  token,
+  qrId,
+  ahora,
+}: {
+  r: NonNullable<FunctionReturnType<typeof api.staff.ver>>;
+  token: string | undefined;
+  qrId: string;
+  ahora: number;
+}) {
+  const estado = estadoRecompensa({ ...r, ahora });
+  return (
+    <>
+      <h1 className="text-[clamp(2rem,8vw,6.5rem)] font-bold uppercase leading-[0.98]">
+        {cafes(r.saldo)}.
+      </h1>
+      <p className="mt-8 max-w-2xl text-xs uppercase leading-loose tracking-[0.17em] sm:text-base">
+        {bajada(estado, r.venceAt)}
+      </p>
+      <dl className="mt-10 border-t border-azul/40">
+        <div className={fila}>
+          <dt>Recompensa</dt>
+          <dd className="text-azul">{cafes(r.cafes)}</dd>
+        </div>
+        {r.staff && (
+          <div className={fila}>
+            <dt>Código</dt>
+            <dd className="text-azul">{r.staff.codigo}</dd>
+          </div>
+        )}
+      </dl>
+      {r.staff && token && estado === "activo" && (
+        <Mostrador qrId={qrId} saldo={r.saldo} canjes={r.staff.canjes} token={token} />
+      )}
+    </>
   );
 }
