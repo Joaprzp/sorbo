@@ -465,7 +465,7 @@ export function Jujuy() {
         </p>
         <Link
           to="/jujuy/numeros"
-          className="mt-6 inline-block font-mono text-[11px] uppercase tracking-[0.16em] text-azul underline-offset-4 hover:underline sm:text-xs"
+          className="mt-8 inline-block bg-azul px-7 py-3 text-xs font-semibold uppercase tracking-[0.17em] text-nieve hover:bg-noche"
         >
           En qué se usa la meta →
         </Link>
