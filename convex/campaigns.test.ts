@@ -459,6 +459,7 @@ const txBase = (over: Partial<import("./_lib/ports").EvmTransfer> = {}) => ({
   contract: "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
   usdCents: 1000, // 10 USDC
   confirmations: 12,
+  blockAt: Date.now() + 60_000, // por defecto, la transfer llega después del aviso
   ...over,
 });
 
@@ -1233,4 +1234,24 @@ test("staff: la sesión vencida y el deshacer tardío los frena el servidor", as
     for (const d of await ctx.db.query("dispositivos").collect()) await ctx.db.patch(d._id, { venceAt: Date.now() - 1 });
   });
   await expect(t.mutation(api.staff.canjear, { qrId: r.qrId, cantidad: 1, token })).rejects.toThrow("SIN_SESION");
+});
+
+test("recompensa: un aviso cripto posterior al pago no da cafés", async () => {
+  const t = convexTest(schema, modules);
+  await campania(t);
+  const evm = new EvmFake();
+  evm.transfers.push(txBase({ txHash: "0xajena", usdCents: 5000, blockAt: Date.now() - 60_000 }));
+  setPortsForTesting(puertos(null, evm));
+  await t.action(internal.contributionsInternal.escanearCrypto, {});
+  await drenar(t);
+  // Alguien ve la transfer on-chain y la reclama con su email: llega tarde.
+  await t.action(api.contributions.contribuir, {
+    slug: "jujuy",
+    via: { rail: "crypto", chainId: "base", txHash: "0xajena", email: "vivo@x.com" },
+  });
+  await drenar(t);
+  expect((await recompensaDe(t, "vivo@x.com"))?.cafes ?? 0).toBe(0);
+  // El aporte igual cuenta para la meta.
+  const p = await t.query(api.campaigns.progreso, { slug: "jujuy" });
+  expect(p!.recaudadoNetoCentavos).toBe(6_000_000);
 });

@@ -15,6 +15,12 @@ export function cafesPorTotal(totalCentavos: number): number {
   return Math.min(TOPE_CAFES, 1 + extra);
 }
 
+// Cripto: el hash de una transfer es público apenas entra al bloque. Solo da
+// cafés si el aviso con email se dejó antes, así nadie reclama la de otro.
+export function avisoAntesDelPago(avisoAt: number, blockAt: number | undefined): boolean {
+  return blockAt !== undefined && avisoAt < blockAt;
+}
+
 export function normalizarEmail(email: string): string {
   return email.trim().toLowerCase();
 }

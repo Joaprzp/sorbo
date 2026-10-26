@@ -78,12 +78,15 @@ export async function saldoDe(ctx: Lector, r: Doc<"recompensas">, ahora: number)
       q.eq("campaniaId", r.campaniaId).eq("email", r.email),
     )
     .collect();
-  // Cuenta la plata que quedó: sin reclamos (la fila de la transfer ya suma)
-  // ni aportes con una devolución en curso.
+  // Cuenta la plata que quedó: sin reclamos (la fila de la transfer ya suma),
+  // sin devoluciones en curso, y cripto solo con aviso previo al pago.
   const total = aportes
     .filter(
       (c) =>
-        c.estado === "aprobada" && c.reclamoDe === undefined && c.refundEstado !== "pendiente",
+        c.estado === "aprobada" &&
+        c.reclamoDe === undefined &&
+        c.refundEstado !== "pendiente" &&
+        (c.via === "mp" || c.avisoPrevio === true),
     )
     .reduce((s, c) => s + (c.aporteCentavos ?? 0), 0);
   const cafes = cafesPorTotal(total);

@@ -172,7 +172,7 @@ export class EvmIndexerHttp implements EvmPort {
       {
         toAddress: address,
         category: ["erc20"],
-        withMetadata: false,
+        withMetadata: true,
         excludeZeroValue: true,
         maxCount: "0x64",
         fromBlock: `0x${Math.max(0, desde).toString(16)}`,
@@ -194,6 +194,7 @@ export class EvmIndexerHttp implements EvmPort {
         value?: number | string;
         blockNum?: string;
         to?: string;
+        metadata?: { blockTimestamp?: string };
         rawContract?: { address?: string; value?: string; decimal?: string };
       }[];
       pageKey?: string;
@@ -212,6 +213,7 @@ export class EvmIndexerHttp implements EvmPort {
         contract: String(t.rawContract?.address ?? "").toLowerCase(),
         usdCents: Math.round(Number(t.value ?? 0) * 100),
         confirmations: confs(t.blockNum),
+        blockAt: t.metadata?.blockTimestamp ? Date.parse(t.metadata.blockTimestamp) : undefined,
       }));
     return { transfers: out, cursor: r?.pageKey };
   }
@@ -235,6 +237,12 @@ export class EvmIndexerHttp implements EvmPort {
     const confs = receipt.blockNumber && head
       ? parseInt(head, 16) - parseInt(receipt.blockNumber, 16) + 1
       : 0;
+    const bloque = receipt.blockNumber
+      ? ((await this.rpc(chain, "eth_getBlockByNumber", [receipt.blockNumber, false])) as {
+          timestamp?: string;
+        } | null)
+      : null;
+    const blockAt = bloque?.timestamp ? parseInt(bloque.timestamp, 16) * 1000 : undefined;
     let primero: EvmTransfer | null = null;
     for (const log of receipt.logs ?? []) {
       const contract = String(log.address).toLowerCase();
@@ -245,7 +253,7 @@ export class EvmIndexerHttp implements EvmPort {
         const to = `0x${topics[2].slice(-40)}`;
         const raw = BigInt(log.data);
         const usdCents = Math.round(Number(raw) * 100 / 10 ** info.decimals);
-        const cand = { chain, txHash, to, asset, contract, usdCents, confirmations: confs };
+        const cand = { chain, txHash, to, asset, contract, usdCents, confirmations: confs, blockAt };
         // En una tx multi-transfer nos quedamos con el log que nos paga a nosotros.
         if (address && to.toLowerCase() === address.toLowerCase()) return cand;
         primero ??= cand;

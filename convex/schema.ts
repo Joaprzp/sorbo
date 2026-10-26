@@ -41,6 +41,10 @@ const contribucionCampos = {
   // Reclamo de una transfer que el scan ya acreditó: la plata vive en esa
   // fila; esta solo muestra el estado y no suma cafés (ADR-0008).
   reclamoDe: v.optional(v.id("contribuciones")),
+  // Cripto (ADR-0008): hora del bloque, y si el aviso con email se dejó antes
+  // del pago. Sin aviso previo no hay cafés: cualquiera ve la transfer on-chain.
+  blockAt: v.optional(v.number()),
+  avisoPrevio: v.optional(v.boolean()),
   createdAt: v.number(),
 };
 

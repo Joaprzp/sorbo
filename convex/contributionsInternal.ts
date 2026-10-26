@@ -9,6 +9,7 @@ import { esTransferValida, esContratoSoportado, centavosPorUsd } from "./_lib/ev
 import { CHAINS_SOPORTADAS, MIN_USD_CENTS, TECHO_AVISO_USD_CENTS } from "./_lib/dominio";
 import { ars } from "../src/lib/format";
 import { asegurarRecompensa } from "./recompensas";
+import { avisoAntesDelPago } from "./_lib/recompensa";
 import { campaniaDoc, contribucionDoc } from "./schema";
 
 type Lector = { db: GenericDatabaseReader<DataModel> };
@@ -555,6 +556,7 @@ export const reclamarTx = internalAction({
       chain: tx.chain,
       usdCents: tx.usdCents,
       mepCentavosPorUsd: mep,
+      blockAt: tx.blockAt,
     });
     await ctx.runMutation(internal.contributionsInternal.acreditar, {
       id,
@@ -584,8 +586,13 @@ export const vincularReclamo = internalMutation({
     // Los cafés van con la plata: el primer reclamo le da su email a la fila
     // de la transfer; uno posterior de la misma transfer no suma cafés.
     const existente = await ctx.db.get(args.existenteId);
-    if (c.email && existente && !existente.email) {
-      await ctx.db.patch(existente._id, { email: c.email });
+    if (
+      c.email &&
+      existente &&
+      !existente.email &&
+      avisoAntesDelPago(c.createdAt, existente.blockAt)
+    ) {
+      await ctx.db.patch(existente._id, { email: c.email, avisoPrevio: true });
       await asegurarRecompensa(ctx, c.campaniaId, c.email);
     }
     if (c.email) {
@@ -605,6 +612,7 @@ export const vincularTx = internalMutation({
     chain: v.string(),
     usdCents: v.number(),
     mepCentavosPorUsd: v.number(),
+    blockAt: v.optional(v.number()),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
@@ -615,6 +623,8 @@ export const vincularTx = internalMutation({
       chain: args.chain,
       usdCents: args.usdCents,
       mepCentavosPorUsd: args.mepCentavosPorUsd,
+      blockAt: args.blockAt,
+      avisoPrevio: avisoAntesDelPago(c.createdAt, args.blockAt),
     });
     return null;
   },
@@ -628,6 +638,7 @@ export const crearObservadaCrypto = internalMutation({
     txHash: v.string(),
     usdCents: v.number(),
     mepCentavosPorUsd: v.number(),
+    blockAt: v.optional(v.number()),
   },
   returns: v.union(v.null(), v.id("contribuciones")),
   handler: async (ctx, args) => {
@@ -651,6 +662,7 @@ export const crearObservadaCrypto = internalMutation({
       txHash: args.txHash,
       usdCents: args.usdCents,
       mepCentavosPorUsd: args.mepCentavosPorUsd,
+      blockAt: args.blockAt,
       createdAt: ahora,
     });
     await evento(ctx, id, "observada", ahora, args.txHash);
@@ -711,6 +723,7 @@ export const escanearCrypto = internalAction({
                 txHash: tx.txHash,
                 usdCents: tx.usdCents,
                 mepCentavosPorUsd: mep,
+                blockAt: tx.blockAt,
               },
             );
             if (id) {

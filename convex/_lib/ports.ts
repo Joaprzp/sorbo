@@ -37,6 +37,7 @@ export interface EvmTransfer {
   contract: string; // contrato ERC-20 visto on-chain — el símbolo no se cree
   usdCents: number;
   confirmations: number;
+  blockAt?: number; // hora del bloque (ms): decide si el aviso fue antes del pago
 }
 
 export interface EvmPort {

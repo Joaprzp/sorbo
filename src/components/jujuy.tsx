@@ -369,7 +369,7 @@ function BloqueCrypto({
         No hay devolución en cripto.
       </p>
       <p className="font-mono text-[11px] uppercase leading-relaxed tracking-[0.14em] text-azul/80">
-        Se cuenta en pesos al MEP del día · Con email, misma regla de cafés.
+        Cafés: dejá tu email y tocá Avisar antes de mandar · Se cuenta en pesos al MEP del día.
       </p>
       <div className="flex flex-wrap items-start gap-8">
         <div
