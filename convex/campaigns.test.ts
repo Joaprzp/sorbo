@@ -4,6 +4,7 @@ import schema from "./schema";
 import { api, internal } from "./_generated/api";
 import { setPortsForTesting, type MpPort, type EvmPort, type FxPort, type MailPort, type PushPort, type Ports } from "./_lib/ports";
 import { CHAINS_SOPORTADAS } from "./_lib/dominio";
+import { esContratoSoportado } from "./_lib/evmChecks";
 
 const modules = import.meta.glob("./**/*.ts");
 
@@ -52,8 +53,12 @@ const mailMemoria: MailPort & { enviados: { kind: string; to: string }[] } = {
 };
 class EvmFake implements EvmPort {
   transfers: import("./_lib/ports").EvmTransfer[] = [];
-  async inboundTransfers() {
-    return { transfers: this.transfers };
+  async inboundTransfers(_address: string, chain: string, _cursor?: string, soloSoportados?: boolean) {
+    return {
+      transfers: this.transfers.filter(
+        (t) => t.chain === chain && (!soloSoportados || esContratoSoportado(chain, t.contract)),
+      ),
+    };
   }
   async getTx(chain: string, txHash: string) {
     return (
