@@ -37,12 +37,13 @@ nombres en la pared, sin merch.
   y el código corto `JUJ-XXXXXX` son el mismo derecho y son transferibles.
 - **Canje solo con staff y después de la apertura.** `fijarApertura` exige
   la meta cumplida, así que no puede haber un canje sobre un aporte que
-  después se devuelve. El staff entra con un PIN de 6 o más dígitos una vez
+  después se devuelve. El staff entra con un PIN de 5 o más caracteres una vez
   por dispositivo (sesión de 90 días, revocable) y descuenta de 1 a N cafés,
   con deshacer por 5 minutos. El servidor no puede identificar dispositivos:
   el bloqueo de 5 intentos por dispositivo frena errores, y lo que frena un
-  ataque es un tope global de 20 fallidos cada 15 minutos. Ese tope deja
-  trabar los ingresos nuevos por 15 minutos; las sesiones abiertas siguen.
+  ataque es un tope global de 5 fallidos por día con 24 horas de bloqueo.
+  Ese tope deja trabar los ingresos nuevos por un día (`desbloquearPin` lo
+  levanta por terminal); las sesiones abiertas siguen.
 
 El presupuesto no cambia: los cafés de recompensa se pagan con la operación,
 no con la meta. El peor caso (toda la meta con email y canjeada entera) está

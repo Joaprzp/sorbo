@@ -1024,8 +1024,10 @@ test("staff: 5 PIN incorrectos bloquean el dispositivo y avisan al admin", async
   expect(await t.mutation(api.staff.ingresar, { pin: "482193", nombre: "x", clave: "cel" })).toEqual({
     error: "PIN_BLOQUEADO",
   });
-  // Otro dispositivo sigue pudiendo entrar.
-  await sesionStaff(t, "otro");
+  // Con el tope global de 5 por día, también se traba otro dispositivo.
+  expect(await t.mutation(api.staff.ingresar, { pin: "482193", nombre: "x", clave: "otro" })).toEqual({
+    error: "PIN_BLOQUEADO",
+  });
   await drenar(t);
   expect(pushMemoria.enviados.map((p) => p.title)).toContain("SORBO · PIN BLOQUEADO");
 });
@@ -1178,7 +1180,7 @@ test("fijarApertura: la segunda vez exige corregir y no reenvía mails", async (
   expect(mailMemoria.conDatos).toHaveLength(0);
 });
 
-test("staff: un PIN de menos de 6 dígitos deja el acceso deshabilitado", async () => {
+test("staff: un PIN de menos de 5 caracteres deja el acceso deshabilitado", async () => {
   process.env.STAFF_PIN = "4821";
   const t = nuevoTest();
   await expect(
@@ -1267,4 +1269,20 @@ test("límites: pasado el tope global, la lista de espera frena", async () => {
   const t = nuevoTest();
   for (let i = 0; i < 20; i++) await t.mutation(api.waitlist.join, { email: `w${i}@x.com` });
   await expect(t.mutation(api.waitlist.join, { email: "w99@x.com" })).rejects.toThrow("DEMASIADO_TRAFICO");
+});
+
+test("staff: con PIN de 5, 5 fallidos en el día traban los ingresos nuevos hasta desbloquear", async () => {
+  process.env.STAFF_PIN = "48219";
+  const t = nuevoTest();
+  setPortsForTesting(puertos(null));
+  for (let i = 0; i < 5; i++) {
+    await t.mutation(api.staff.ingresar, { pin: "00000", nombre: "x", clave: `rota-${i}` });
+  }
+  expect(await t.mutation(api.staff.ingresar, { pin: "48219", nombre: "x", clave: "nueva" })).toEqual({
+    error: "PIN_BLOQUEADO",
+  });
+  expect(await t.mutation(internal.staff.desbloquearPin, {})).toBeGreaterThan(0);
+  const r = await t.mutation(api.staff.ingresar, { pin: "48219", nombre: "x", clave: "nueva" });
+  expect(r.token).toBeDefined();
+  process.env.STAFF_PIN = "482193";
 });

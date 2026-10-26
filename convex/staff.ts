@@ -13,15 +13,14 @@ type Escritor = { db: GenericDatabaseWriter<DataModel> };
 
 const MIN = 60 * 1000;
 const SESION_MS = 90 * 24 * 60 * MIN;
-const BLOQUEO_MS = 15 * MIN;
-// La clave del dispositivo la manda el cliente: frena al que se equivoca,
-// no a un atacante que la rota. Contra ese, el tope global más un PIN de 6+
-// dígitos: 20 intentos cada 15 min son ~1.900 por día, un millón de PINs lleva
-// más de un año. El costo: cualquiera puede trabar los ingresos nuevos por 15
-// min; las sesiones abiertas (90 días) siguen andando.
-const FALLIDOS_DISPOSITIVO = 5;
-const FALLIDOS_GLOBAL = 20;
-const PIN_MINIMO = 6;
+// La clave del dispositivo la manda el cliente: frena al que se equivoca
+// (5 fallidos → 15 min), no a un atacante que la rota. Contra ese, el tope
+// global: 5 fallidos por día → 24 h de bloqueo; un PIN de 5 dígitos
+// (100.000) lleva décadas. El costo: 5 errores traban los ingresos nuevos un
+// día (desbloquearPin lo levanta); las sesiones abiertas (90 días) siguen.
+const DISPOSITIVO = { umbral: 5, ventanaMs: 15 * MIN };
+const GLOBAL = { umbral: 5, ventanaMs: 24 * 60 * MIN };
+const PIN_MINIMO = 5;
 
 
 async function sha256(texto: string): Promise<string> {
@@ -70,12 +69,17 @@ async function intentos(ctx: Escritor, clave: string) {
     .unique();
 }
 
-// Ventana fija de 15 minutos por clave; al pasar el umbral, bloqueo.
-async function registrarFallo(ctx: Escritor, clave: string, umbral: number, ahora: number) {
+// Ventana fija por clave; al llegar al umbral, bloqueo por otra ventana.
+async function registrarFallo(
+  ctx: Escritor,
+  clave: string,
+  { umbral, ventanaMs }: { umbral: number; ventanaMs: number },
+  ahora: number,
+) {
   const fila = await intentos(ctx, clave);
-  const vigente = fila && ahora - fila.desde < BLOQUEO_MS;
+  const vigente = fila && ahora - fila.desde < ventanaMs;
   const fallidos = vigente ? fila.fallidos + 1 : 1;
-  const bloqueadoHasta = fallidos >= umbral ? ahora + BLOQUEO_MS : fila?.bloqueadoHasta;
+  const bloqueadoHasta = fallidos >= umbral ? ahora + ventanaMs : fila?.bloqueadoHasta;
   if (fila) {
     await ctx.db.patch(fila._id, { fallidos, desde: vigente ? fila.desde : ahora, bloqueadoHasta });
   } else {
@@ -103,13 +107,13 @@ export const ingresar = mutation({
       if (f?.bloqueadoHasta && f.bloqueadoHasta > ahora) return { error: "PIN_BLOQUEADO" as const };
     }
     if (!mismoPin(pin, esperado)) {
-      const bloqueoDisp = await registrarFallo(ctx, claveDisp, FALLIDOS_DISPOSITIVO, ahora);
-      const bloqueoGlobal = await registrarFallo(ctx, "global", FALLIDOS_GLOBAL, ahora);
+      const bloqueoDisp = await registrarFallo(ctx, claveDisp, DISPOSITIVO, ahora);
+      const bloqueoGlobal = await registrarFallo(ctx, "global", GLOBAL, ahora);
       if (bloqueoDisp || bloqueoGlobal) {
         await ctx.scheduler.runAfter(0, internal.contributionsInternal.avisarAdmin, {
           kind: "staff_bloqueado",
           detalle: bloqueoGlobal
-            ? `${FALLIDOS_GLOBAL} PIN incorrectos en 15 min · ingresos bloqueados`
+            ? `${GLOBAL.umbral} PIN incorrectos hoy · ingresos bloqueados 24 h · desbloquearPin para levantarlo`
             : `"${nombreLimpio}" bloqueado 15 min por PIN incorrecto`,
         });
       }
@@ -252,6 +256,18 @@ export const deshacer = mutation({
     }
     await ctx.db.patch(canjeId, { deshechoAt: ahora });
     return null;
+  },
+});
+
+// Desde `bunx convex run`: levanta el bloqueo por PIN (global y de cada
+// dispositivo) cuando fue un error del staff y no un ataque.
+export const desbloquearPin = internalMutation({
+  args: {},
+  returns: v.number(),
+  handler: async (ctx) => {
+    const filas = await ctx.db.query("intentosPin").take(500);
+    for (const f of filas) await ctx.db.delete(f._id);
+    return filas.length;
   },
 });
 
