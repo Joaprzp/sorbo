@@ -18,6 +18,7 @@ export function WaitlistForm() {
   const {
     register,
     handleSubmit,
+    setError,
     formState: { errors, isSubmitting },
   } = useForm<Values>({ resolver: zodResolver(schema) });
 
@@ -30,8 +31,17 @@ export function WaitlistForm() {
   }
 
   const onSubmit = handleSubmit(async (values) => {
-    await join({ email: values.email, website: values.website });
-    setSent(true);
+    try {
+      await join({ email: values.email, website: values.website });
+      setSent(true);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "";
+      setError("email", {
+        message: msg.includes("DEMASIADO_TRAFICO")
+          ? "Hay mucho tráfico. Probá en un minuto."
+          : "No pudimos anotarte. Probá de nuevo.",
+      });
+    }
   });
 
   return (

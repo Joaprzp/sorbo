@@ -1,5 +1,6 @@
 import { test, expect, vi } from "vitest";
 import { convexTest } from "convex-test";
+import rateLimiter from "@convex-dev/rate-limiter/test";
 import schema from "./schema";
 import { api, internal } from "./_generated/api";
 import { setPortsForTesting, type MpPort, type EvmPort, type FxPort, type MailData, type MailPort, type PushPort, type Ports } from "./_lib/ports";
@@ -7,6 +8,12 @@ import { CHAINS_SOPORTADAS } from "./_lib/dominio";
 import { esContratoSoportado } from "./_lib/evmChecks";
 
 const modules = import.meta.glob("./**/*.ts");
+
+function nuevoTest() {
+  const t = convexTest(schema, modules);
+  rateLimiter.register(t);
+  return t;
+}
 
 class MpFake implements MpPort {
   orders = new Map<string, { externalReference: string; totalCentavos: number; status: string; statusDetail?: string; totalPaidCentavos?: number }>();
@@ -98,12 +105,12 @@ async function campania(t: ReturnType<typeof convexTest>, slug = "jujuy") {
 }
 
 test("harness: convex-test levanta el schema", async () => {
-  const t = convexTest(schema, modules);
+  const t = nuevoTest();
   await campania(t);
 });
 
 test("contribuir mp: crea contribución pendiente y devuelve redirect a MP", async () => {
-  const t = convexTest(schema, modules);
+  const t = nuevoTest();
   await campania(t);
   const mp = new MpFake();
   setPortsForTesting(puertos(mp));
@@ -123,7 +130,7 @@ test("contribuir mp: crea contribución pendiente y devuelve redirect a MP", asy
 });
 
 test("contribuir mp: rechaza monto bajo el mínimo", async () => {
-  const t = convexTest(schema, modules);
+  const t = nuevoTest();
   await campania(t);
   setPortsForTesting(puertos(new MpFake()));
 
@@ -175,7 +182,7 @@ async function drenar(t: ReturnType<typeof convexTest>) {
 }
 
 test("pago verificado por webhook acredita y suma al progreso", async () => {
-  const t = convexTest(schema, modules);
+  const t = nuevoTest();
   await campania(t);
   const mp = new MpFake();
   setPortsForTesting(puertos(mp));
@@ -199,7 +206,7 @@ test("pago verificado por webhook acredita y suma al progreso", async () => {
 });
 
 test("webhook duplicado no duplica la acreditación", async () => {
-  const t = convexTest(schema, modules);
+  const t = nuevoTest();
   await campania(t);
   const mp = new MpFake();
   setPortsForTesting(puertos(mp));
@@ -220,7 +227,7 @@ test("webhook duplicado no duplica la acreditación", async () => {
 });
 
 test("webhook con firma inválida no agenda nada", async () => {
-  const t = convexTest(schema, modules);
+  const t = nuevoTest();
   await campania(t);
   const mp = new MpFake();
   setPortsForTesting(puertos(mp));
@@ -241,7 +248,7 @@ test("webhook con firma inválida no agenda nada", async () => {
 // --- slice 3: reconciliar al volver de MP ---
 
 test("reconciliar al volver acredita sin esperar al webhook", async () => {
-  const t = convexTest(schema, modules);
+  const t = nuevoTest();
   await campania(t);
   const mp = new MpFake();
   setPortsForTesting(puertos(mp));
@@ -259,7 +266,7 @@ test("reconciliar al volver acredita sin esperar al webhook", async () => {
 });
 
 test("reconciliar con token inválido no rompe nada", async () => {
-  const t = convexTest(schema, modules);
+  const t = nuevoTest();
   await campania(t);
   setPortsForTesting(puertos(new MpFake()));
 
@@ -271,7 +278,7 @@ test("reconciliar con token inválido no rompe nada", async () => {
 const HORA = 3_600_000;
 
 test("sweep expira una orden que MP dio por vencida", async () => {
-  const t = convexTest(schema, modules);
+  const t = nuevoTest();
   await campania(t);
   const mp = new MpFake();
   setPortsForTesting(puertos(mp));
@@ -290,7 +297,7 @@ test("sweep expira una orden que MP dio por vencida", async () => {
 });
 
 test("sweep no expira un pago en proceso (ticket en camino)", async () => {
-  const t = convexTest(schema, modules);
+  const t = nuevoTest();
   await campania(t);
   const mp = new MpFake();
   setPortsForTesting(puertos(mp));
@@ -309,7 +316,7 @@ test("sweep no expira un pago en proceso (ticket en camino)", async () => {
 });
 
 test("sweep cancela en MP una orden aún creada", async () => {
-  const t = convexTest(schema, modules);
+  const t = nuevoTest();
   await campania(t);
   const mp = new MpFake();
   setPortsForTesting(puertos(mp));
@@ -328,7 +335,7 @@ test("sweep cancela en MP una orden aún creada", async () => {
 });
 
 test("pago tardío verificado sobre fila expirada igual acredita", async () => {
-  const t = convexTest(schema, modules);
+  const t = nuevoTest();
   await campania(t);
   const mp = new MpFake();
   setPortsForTesting(puertos(mp));
@@ -384,7 +391,7 @@ async function acreditar(
 }
 
 test("contribución de 90 días con meta incompleta se devuelve sola", async () => {
-  const t = convexTest(schema, modules);
+  const t = nuevoTest();
   await campania(t);
   const { mp, token } = await acreditar(t, 500_000, { email: "a@b.com", diasAtras: 90 });
   const reembolsos: string[] = [];
@@ -403,7 +410,7 @@ test("contribución de 90 días con meta incompleta se devuelve sola", async () 
 });
 
 test("contribución de 30 días no se devuelve todavía", async () => {
-  const t = convexTest(schema, modules);
+  const t = nuevoTest();
   await campania(t);
   const { mp } = await acreditar(t, 500_000, { diasAtras: 30 });
   let llamadas = 0;
@@ -416,7 +423,7 @@ test("contribución de 30 días no se devuelve todavía", async () => {
 });
 
 test("con meta cumplida no hay devoluciones (latch)", async () => {
-  const t = convexTest(schema, modules);
+  const t = nuevoTest();
   await campania(t);
   const { mp } = await acreditar(t, 500_000, { diasAtras: 90 });
   await t.run(async (ctx) => {
@@ -433,7 +440,7 @@ test("con meta cumplida no hay devoluciones (latch)", async () => {
 });
 
 test("el barrido de devoluciones es idempotente", async () => {
-  const t = convexTest(schema, modules);
+  const t = nuevoTest();
   await campania(t);
   const { mp } = await acreditar(t, 500_000, { diasAtras: 90 });
   let llamadas = 0;
@@ -464,7 +471,7 @@ const txBase = (over: Partial<import("./_lib/ports").EvmTransfer> = {}) => ({
 });
 
 test("contribuir crypto devuelve el intent de depósito", async () => {
-  const t = convexTest(schema, modules);
+  const t = nuevoTest();
   await campania(t);
   const evm = new EvmFake();
   setPortsForTesting(puertos(null, evm));
@@ -483,7 +490,7 @@ test("contribuir crypto devuelve el intent de depósito", async () => {
 });
 
 test("scan acredita una transferencia USDC válida a cotización MEP", async () => {
-  const t = convexTest(schema, modules);
+  const t = nuevoTest();
   await campania(t);
   const evm = new EvmFake();
   evm.transfers.push(txBase());
@@ -499,7 +506,7 @@ test("scan acredita una transferencia USDC válida a cotización MEP", async () 
 });
 
 test("scan ignora dust, asset no soportado, contrato falso y otra address", async () => {
-  const t = convexTest(schema, modules);
+  const t = nuevoTest();
   await campania(t);
   const evm = new EvmFake();
   evm.transfers.push(
@@ -519,7 +526,7 @@ test("scan ignora dust, asset no soportado, contrato falso y otra address", asyn
 });
 
 test("scan acredita USDT0 omnichain aunque el símbolo reportado varíe", async () => {
-  const t = convexTest(schema, modules);
+  const t = nuevoTest();
   await campania(t);
   const evm = new EvmFake();
   evm.transfers.push(
@@ -548,7 +555,7 @@ test("scan acredita USDT0 omnichain aunque el símbolo reportado varíe", async 
 });
 
 test("scan ignora un depósito anterior a la campaña (wallet con historia)", async () => {
-  const t = convexTest(schema, modules);
+  const t = nuevoTest();
   await campania(t);
   const evm = new EvmFake();
   // La wallet aceptaba depósitos antes de la campaña: confirmaciones muy
@@ -573,7 +580,7 @@ test("scan ignora un depósito anterior a la campaña (wallet con historia)", as
 });
 
 test("claim por hash rechaza un depósito anterior a la campaña", async () => {
-  const t = convexTest(schema, modules);
+  const t = nuevoTest();
   await campania(t);
   const evm = new EvmFake();
   evm.transfers.push(
@@ -605,7 +612,7 @@ test("claim por hash rechaza un depósito anterior a la campaña", async () => {
 });
 
 test("aporte acreditado avisa al admin por push", async () => {
-  const t = convexTest(schema, modules);
+  const t = nuevoTest();
   await campania(t);
   const evm = new EvmFake();
   evm.transfers.push(txBase());
@@ -621,7 +628,7 @@ test("aporte acreditado avisa al admin por push", async () => {
 });
 
 test("transfer inválida a la wallet avisa una sola vez", async () => {
-  const t = convexTest(schema, modules);
+  const t = nuevoTest();
   await campania(t);
   const evm = new EvmFake();
   // Token no soportado: 8 USD de "DAI" — plata real que la campaña no cuenta.
@@ -642,7 +649,7 @@ test("transfer inválida a la wallet avisa una sola vez", async () => {
 });
 
 test("dust rechazado no avisa", async () => {
-  const t = convexTest(schema, modules);
+  const t = nuevoTest();
   await campania(t);
   const evm = new EvmFake();
   evm.transfers.push(
@@ -658,7 +665,7 @@ test("dust rechazado no avisa", async () => {
 });
 
 test("scan es idempotente por txHash", async () => {
-  const t = convexTest(schema, modules);
+  const t = nuevoTest();
   await campania(t);
   const evm = new EvmFake();
   evm.transfers.push(txBase());
@@ -673,7 +680,7 @@ test("scan es idempotente por txHash", async () => {
 });
 
 test("contribuyente que pega su txHash acredita al instante", async () => {
-  const t = convexTest(schema, modules);
+  const t = nuevoTest();
   await campania(t);
   const evm = new EvmFake();
   evm.transfers.push(txBase());
@@ -692,7 +699,7 @@ test("contribuyente que pega su txHash acredita al instante", async () => {
 });
 
 test("txHash inexistente no acredita ni rompe", async () => {
-  const t = convexTest(schema, modules);
+  const t = nuevoTest();
   await campania(t);
   setPortsForTesting(puertos(null, new EvmFake()));
 
@@ -709,7 +716,7 @@ test("txHash inexistente no acredita ni rompe", async () => {
 // --- slice 7: notificaciones ---
 
 test("acreditar con email dispara notificación de acreditación", async () => {
-  const t = convexTest(schema, modules);
+  const t = nuevoTest();
   await campania(t);
   const mp = new MpFake();
   setPortsForTesting(puertos(mp));
@@ -727,7 +734,7 @@ test("acreditar con email dispara notificación de acreditación", async () => {
 });
 
 test("devolución automática avisa por email", async () => {
-  const t = convexTest(schema, modules);
+  const t = nuevoTest();
   await campania(t);
   await acreditar(t, 500_000, { email: "a@b.com", diasAtras: 90 });
   mailMemoria.enviados.length = 0;
@@ -739,7 +746,7 @@ test("devolución automática avisa por email", async () => {
 });
 
 test("la meta cumplida hace latch y avisa a contribuyentes con email", async () => {
-  const t = convexTest(schema, modules);
+  const t = nuevoTest();
   await t.run(async (ctx) => {
     await ctx.db.insert("campaigns", {
       slug: "jujuy",
@@ -762,7 +769,7 @@ test("la meta cumplida hace latch y avisa a contribuyentes con email", async () 
 });
 
 test("fijarMeta mueve la meta de una campaña abierta", async () => {
-  const t = convexTest(schema, modules);
+  const t = nuevoTest();
   await campania(t);
   await acreditar(t, 500_000);
   await drenar(t);
@@ -781,7 +788,7 @@ test("fijarMeta mueve la meta de una campaña abierta", async () => {
 });
 
 test("fijarMeta no reabre una campaña cumplida", async () => {
-  const t = convexTest(schema, modules);
+  const t = nuevoTest();
   await t.run(async (ctx) => {
     await ctx.db.insert("campaigns", {
       slug: "jujuy",
@@ -801,7 +808,7 @@ test("fijarMeta no reabre una campaña cumplida", async () => {
 // --- fixes del review ---
 
 test("hash ya acreditado por scan deja el intent en aprobada, sin duplicar", async () => {
-  const t = convexTest(schema, modules);
+  const t = nuevoTest();
   await campania(t);
   const evm = new EvmFake();
   evm.transfers.push(txBase());
@@ -823,7 +830,7 @@ test("hash ya acreditado por scan deja el intent en aprobada, sin duplicar", asy
 });
 
 test("txHash en otra red soportada acredita igual", async () => {
-  const t = convexTest(schema, modules);
+  const t = nuevoTest();
   await campania(t);
   const evm = new EvmFake();
   evm.transfers.push(
@@ -845,7 +852,7 @@ test("txHash en otra red soportada acredita igual", async () => {
 });
 
 test("refund marcado antes del latch no se ejecuta después", async () => {
-  const t = convexTest(schema, modules);
+  const t = nuevoTest();
   await campania(t);
   const { mp } = await acreditar(t, 500_000, { diasAtras: 90 });
   await t.run(async (ctx) => {
@@ -873,7 +880,7 @@ async function recompensaDe(t: ReturnType<typeof convexTest>, email: string) {
 }
 
 test("recompensa: se suma por email y aplica la regla sobre el total", async () => {
-  const t = convexTest(schema, modules);
+  const t = nuevoTest();
   await campania(t);
   const { mp } = await acreditar(t, 500_000, { email: "Ana@Mail.com " });
   let r = await recompensaDe(t, "ana@mail.com");
@@ -888,7 +895,7 @@ test("recompensa: se suma por email y aplica la regla sobre el total", async () 
 });
 
 test("recompensa: sin email no hay recompensa", async () => {
-  const t = convexTest(schema, modules);
+  const t = nuevoTest();
   await campania(t);
   await acreditar(t, 9_500_000);
   const filas = await t.run((ctx) => ctx.db.query("recompensas").collect());
@@ -896,7 +903,7 @@ test("recompensa: sin email no hay recompensa", async () => {
 });
 
 test("recompensa: la devolución anula los cafés de ese aporte", async () => {
-  const t = convexTest(schema, modules);
+  const t = nuevoTest();
   await campania(t);
   await acreditar(t, 500_000, { email: "b@b.com", diasAtras: 90 });
   await drenar(t);
@@ -906,7 +913,7 @@ test("recompensa: la devolución anula los cafés de ese aporte", async () => {
 });
 
 test("recompensa: el aporte posterior a la meta también suma, y la apertura la activa", async () => {
-  const t = convexTest(schema, modules);
+  const t = nuevoTest();
   await t.run(async (ctx) => {
     await ctx.db.insert("campaigns", {
       slug: "jujuy",
@@ -930,7 +937,7 @@ test("recompensa: el aporte posterior a la meta también suma, y la apertura la 
 });
 
 test("recompensa: fijarApertura exige la meta cumplida", async () => {
-  const t = convexTest(schema, modules);
+  const t = nuevoTest();
   await campania(t);
   await expect(
     t.mutation(internal.recompensas.fijarApertura, { slug: "jujuy", aperturaAt: Date.now() }),
@@ -938,7 +945,7 @@ test("recompensa: fijarApertura exige la meta cumplida", async () => {
 });
 
 test("recompensa: cripto cuenta en pesos a MEP del día", async () => {
-  const t = convexTest(schema, modules);
+  const t = nuevoTest();
   await campania(t);
   const evm = new EvmFake();
   evm.transfers.push(txBase({ txHash: "0xcafe", usdCents: 5000 })); // 50 USDC
@@ -953,7 +960,7 @@ test("recompensa: cripto cuenta en pesos a MEP del día", async () => {
 });
 
 test("recompensa: completarRecompensas cubre aportes previos con email", async () => {
-  const t = convexTest(schema, modules);
+  const t = nuevoTest();
   await campania(t);
   await acreditar(t, 500_000, { email: "e@e.com" });
   await t.run(async (ctx) => {
@@ -992,7 +999,7 @@ async function sesionStaff(t: ReturnType<typeof convexTest>, clave = "tablet") {
 
 test("staff: PIN correcto abre sesión; el QR público no muestra el código", async () => {
   process.env.STAFF_PIN = "482193";
-  const t = convexTest(schema, modules);
+  const t = nuevoTest();
   const r = await conApertura(t);
   const publico = await t.query(api.staff.ver, { qrId: r.qrId });
   expect(publico).toMatchObject({ saldo: 3, cumplida: true, staff: null });
@@ -1006,7 +1013,7 @@ test("staff: PIN correcto abre sesión; el QR público no muestra el código", a
 
 test("staff: 5 PIN incorrectos bloquean el dispositivo y avisan al admin", async () => {
   process.env.STAFF_PIN = "482193";
-  const t = convexTest(schema, modules);
+  const t = nuevoTest();
   setPortsForTesting(puertos(null));
   pushMemoria.enviados.length = 0;
   for (let i = 0; i < 5; i++) {
@@ -1025,7 +1032,7 @@ test("staff: 5 PIN incorrectos bloquean el dispositivo y avisan al admin", async
 
 test("canje: descuenta, no deja pasar del saldo y se puede deshacer", async () => {
   process.env.STAFF_PIN = "482193";
-  const t = convexTest(schema, modules);
+  const t = nuevoTest();
   const r = await conApertura(t); // $25.000 → 3 cafés
   const token = await sesionStaff(t);
   expect(await t.mutation(api.staff.canjear, { qrId: r.qrId, cantidad: 2, token })).toEqual({ saldo: 1 });
@@ -1040,7 +1047,7 @@ test("canje: descuenta, no deja pasar del saldo y se puede deshacer", async () =
 
 test("canje: sin sesión, revocada o antes de la apertura no se puede", async () => {
   process.env.STAFF_PIN = "482193";
-  const t = convexTest(schema, modules);
+  const t = nuevoTest();
   await campania(t); // meta lejos: sin apertura posible
   await acreditar(t, 500_000, { email: "z@z.com" });
   const r = (await t.query(internal.recompensas.porEmail, { slug: "jujuy", email: "z@z.com" }))!;
@@ -1055,7 +1062,7 @@ test("canje: sin sesión, revocada o antes de la apertura no se puede", async ()
 
 test("canje: el código corto encuentra el QR solo con sesión", async () => {
   process.env.STAFF_PIN = "482193";
-  const t = convexTest(schema, modules);
+  const t = nuevoTest();
   const r = await conApertura(t);
   await expect(t.query(api.staff.buscarCodigo, { codigo: r.codigo, token: "x" })).rejects.toThrow("SIN_SESION");
   const token = await sesionStaff(t);
@@ -1071,7 +1078,7 @@ test("canje: el código corto encuentra el QR solo con sesión", async () => {
 // --- mails de recompensa (ADR-0008) ---
 
 test("mail: la acreditación con email lleva la recompensa; la devolución, el saldo", async () => {
-  const t = convexTest(schema, modules);
+  const t = nuevoTest();
   await campania(t);
   mailMemoria.conDatos.length = 0;
   await acreditar(t, 1_500_000, { email: "m@m.com", diasAtras: 90 });
@@ -1087,7 +1094,7 @@ test("mail: la acreditación con email lleva la recompensa; la devolución, el s
 });
 
 test("mail: fijarApertura avisa a quien tiene cafés; el vencimiento avisa una sola vez", async () => {
-  const t = convexTest(schema, modules);
+  const t = nuevoTest();
   await t.run(async (ctx) => {
     await ctx.db.insert("campaigns", {
       slug: "jujuy",
@@ -1124,7 +1131,7 @@ test("mail: fijarApertura avisa a quien tiene cafés; el vencimiento avisa una s
 // --- correcciones del review de recompensas ---
 
 test("recompensa: dos reclamos de la misma transfer no duplican cafés", async () => {
-  const t = convexTest(schema, modules);
+  const t = nuevoTest();
   await campania(t);
   const evm = new EvmFake();
   evm.transfers.push(txBase({ txHash: "0xdoble", usdCents: 5000 })); // 50 USD → 6 cafés
@@ -1143,7 +1150,7 @@ test("recompensa: dos reclamos de la misma transfer no duplican cafés", async (
 });
 
 test("recompensa: una devolución en curso ya no suma cafés", async () => {
-  const t = convexTest(schema, modules);
+  const t = nuevoTest();
   await campania(t);
   await acreditar(t, 500_000, { email: "r@r.com" });
   await t.run(async (ctx) => {
@@ -1154,7 +1161,7 @@ test("recompensa: una devolución en curso ya no suma cafés", async () => {
 });
 
 test("fijarApertura: la segunda vez exige corregir y no reenvía mails", async () => {
-  const t = convexTest(schema, modules);
+  const t = nuevoTest();
   await t.run(async (ctx) => {
     await ctx.db.insert("campaigns", { slug: "jujuy", metaCentavos: 500_000, recaudadoNetoCentavos: 0, contribuyentes: 0 });
   });
@@ -1173,7 +1180,7 @@ test("fijarApertura: la segunda vez exige corregir y no reenvía mails", async (
 
 test("staff: un PIN de menos de 6 dígitos deja el acceso deshabilitado", async () => {
   process.env.STAFF_PIN = "4821";
-  const t = convexTest(schema, modules);
+  const t = nuevoTest();
   await expect(
     t.mutation(api.staff.ingresar, { pin: "4821", nombre: "x", clave: "c" }),
   ).rejects.toThrow("STAFF_NO_CONFIGURADO");
@@ -1181,7 +1188,7 @@ test("staff: un PIN de menos de 6 dígitos deja el acceso deshabilitado", async 
 });
 
 test("escala: la apertura llega a todos aunque sean más que una página", async () => {
-  const t = convexTest(schema, modules);
+  const t = nuevoTest();
   setPortsForTesting(puertos(null));
   const N = 450;
   await t.run(async (ctx) => {
@@ -1219,7 +1226,7 @@ test("escala: la apertura llega a todos aunque sean más que una página", async
 
 test("staff: la sesión vencida y el deshacer tardío los frena el servidor", async () => {
   process.env.STAFF_PIN = "482193";
-  const t = convexTest(schema, modules);
+  const t = nuevoTest();
   const r = await conApertura(t);
   const token = await sesionStaff(t);
   await t.mutation(api.staff.canjear, { qrId: r.qrId, cantidad: 1, token });
@@ -1237,7 +1244,7 @@ test("staff: la sesión vencida y el deshacer tardío los frena el servidor", as
 });
 
 test("recompensa: un aviso cripto posterior al pago no da cafés", async () => {
-  const t = convexTest(schema, modules);
+  const t = nuevoTest();
   await campania(t);
   const evm = new EvmFake();
   evm.transfers.push(txBase({ txHash: "0xajena", usdCents: 5000, blockAt: Date.now() - 60_000 }));
@@ -1254,4 +1261,10 @@ test("recompensa: un aviso cripto posterior al pago no da cafés", async () => {
   // El aporte igual cuenta para la meta.
   const p = await t.query(api.campaigns.progreso, { slug: "jujuy" });
   expect(p!.recaudadoNetoCentavos).toBe(6_000_000);
+});
+
+test("límites: pasado el tope global, la lista de espera frena", async () => {
+  const t = nuevoTest();
+  for (let i = 0; i < 20; i++) await t.mutation(api.waitlist.join, { email: `w${i}@x.com` });
+  await expect(t.mutation(api.waitlist.join, { email: "w99@x.com" })).rejects.toThrow("DEMASIADO_TRAFICO");
 });

@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { mutation } from "./_generated/server";
+import { frenar } from "./limites";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -10,6 +11,7 @@ export const join = mutation({
     if (args.website) {
       return null;
     }
+    await frenar(ctx, "listaDeEspera");
     const email = args.email.trim().toLowerCase();
     if (!EMAIL_RE.test(email)) {
       throw new Error("EMAIL_INVALID");

@@ -5,6 +5,7 @@ import { estadoContribucion } from "./schema";
 import { resolvePorts } from "./_lib/ports";
 import { CHAINS_SOPORTADAS, MIN_MP_CENTAVOS, MIN_USD_CENTS } from "./_lib/dominio";
 import { normalizarEmail } from "./_lib/recompensa";
+import { frenar } from "./limites";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const SITE_URL = process.env.SITE_URL ?? "https://sorbolabs.com";
@@ -52,6 +53,7 @@ export const contribuir = action({
     const ports = resolvePorts();
     if (args.via.rail === "mp") {
       if (!ports.mp) throw new Error("MP_NO_CONFIGURADO");
+      await frenar(ctx, "contribuirMp");
       const { montoCentavos } = args.via;
       const email = args.via.email === undefined ? undefined : normalizarEmail(args.via.email);
       if (!Number.isInteger(montoCentavos) || montoCentavos < MIN_MP_CENTAVOS) {
@@ -113,6 +115,7 @@ export const contribuir = action({
         { slug: args.slug, chainId, email },
       );
       if (txHash) {
+        await frenar(ctx, "verificarTx");
         await ctx.runAction(internal.contributionsInternal.reclamarTx, { id, txHash });
       }
       return {
@@ -139,6 +142,7 @@ export const reconciliar = action({
       { token },
     );
     if (!c || (c.estado !== "pendiente" && c.estado !== "expirada")) return null;
+    await frenar(ctx, txHash ? "verificarTx" : "reconciliar");
     if (c.via === "mp" && c.mpOrderId) {
       await ctx.runAction(internal.contributionsInternal.sincronizarMpPorOrden, {
         mpOrderId: c.mpOrderId,

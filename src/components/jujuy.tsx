@@ -22,6 +22,7 @@ const errores: Record<string, string> = {
   MP_FALLO: "No pudimos hablar con Mercado Pago. Probá de nuevo.",
   MP_NO_CONFIGURADO: "Mercado Pago no está disponible ahora.",
   CAMPANIA_NO_EXISTE: "La campaña no está disponible.",
+  DEMASIADO_TRAFICO: "Hay mucho tráfico. Probá en un minuto.",
 };
 
 function mensajeError(e: unknown): string {

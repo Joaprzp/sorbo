@@ -14,6 +14,7 @@
     "convex:dev": "bunx convex dev"
   },
   "dependencies": {
+    "@convex-dev/rate-limiter": "^0.4.2",
     "@hookform/resolvers": "^6.0.0",
     "@tanstack/react-router": "^1.170.45",
     "convex": "^1.47.0",
