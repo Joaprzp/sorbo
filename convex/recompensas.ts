@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { internalAction, internalMutation, internalQuery } from "./_generated/server";
+import { internalAction, internalMutation, internalQuery, type ActionCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
 import type { GenericDatabaseReader, GenericDatabaseWriter } from "convex/server";
 import type { DataModel, Doc, Id } from "./_generated/dataModel";
@@ -115,63 +115,92 @@ export const paraMail = internalQuery({
   },
 });
 
-export const conSaldo = internalQuery({
-  args: { campaniaId: v.id("campaigns") },
-  handler: async (ctx, { campaniaId }) => {
-    const todas = await ctx.db
+// Por página: con la meta completa son miles de personas y cada saldo lee
+// aportes y canjes; una sola consulta pasaría el límite de lecturas de Convex.
+export const pagina = internalQuery({
+  args: { campaniaId: v.id("campaigns"), cursor: v.union(v.string(), v.null()) },
+  handler: async (ctx, { campaniaId, cursor }) => {
+    const p = await ctx.db
       .query("recompensas")
       .withIndex("by_campania_email", (q) => q.eq("campaniaId", campaniaId))
-      .collect();
-    const out: { id: Id<"recompensas">; email: string; mail: RecompensaMail }[] = [];
-    for (const r of todas) {
-      const mail = await paraMailDe(ctx, r);
-      if (mail.saldo > 0) out.push({ id: r._id, email: r.email, mail });
-    }
-    return out;
+      .paginate({ numItems: 200, cursor });
+    return {
+      emails: p.page.map((r) => r.email),
+      isDone: p.isDone,
+      continueCursor: p.continueCursor,
+    };
   },
 });
+
+type Envio = { kind: "meta_cumplida" | "apertura" | "vence_pronto"; campaniaId: Id<"campaigns">; email: string };
+
+// Un mail por acción: uno que falla no frena al resto. Apertura y vencimiento
+// solo a quien tiene cafés; el vencimiento, una vez por persona
+// (send-then-mark en avisosAdmin).
+export const enviarMail = internalAction({
+  args: {
+    kind: v.union(v.literal("meta_cumplida"), v.literal("apertura"), v.literal("vence_pronto")),
+    campaniaId: v.id("campaigns"),
+    email: v.string(),
+  },
+  handler: async (ctx, { kind, campaniaId, email }: Envio) => {
+    const ports = resolvePorts();
+    if (!ports.mail) return;
+    const recompensa = await ctx.runQuery(internal.recompensas.paraMail, { campaniaId, email });
+    if (kind !== "meta_cumplida" && (!recompensa || recompensa.saldo === 0)) return;
+    const clave = `vence:${campaniaId}:${email}`;
+    if (
+      kind === "vence_pronto" &&
+      (await ctx.runQuery(internal.contributionsInternal.avisoEnviado, { clave }))
+    ) {
+      return;
+    }
+    await ports.mail.send(kind, email, recompensa ? { recompensa } : {});
+    if (kind === "vence_pronto") {
+      await ctx.runMutation(internal.contributionsInternal.registrarAviso, { clave });
+    }
+  },
+});
+
+async function programarATodos(
+  ctx: ActionCtx,
+  campaniaId: Id<"campaigns">,
+  kind: Envio["kind"],
+) {
+  let cursor: string | null = null;
+  for (;;) {
+    const p: { emails: string[]; isDone: boolean; continueCursor: string } = await ctx.runQuery(
+      internal.recompensas.pagina,
+      { campaniaId, cursor },
+    );
+    for (const email of p.emails) {
+      await ctx.scheduler.runAfter(0, internal.recompensas.enviarMail, { kind, campaniaId, email });
+    }
+    if (p.isDone) return;
+    cursor = p.continueCursor;
+  }
+}
 
 export const anunciarApertura = internalAction({
   args: { campaniaId: v.id("campaigns") },
   handler: async (ctx, { campaniaId }) => {
-    const ports = resolvePorts();
-    if (!ports.mail) return;
-    const lista = await ctx.runQuery(internal.recompensas.conSaldo, { campaniaId });
-    for (const { email, mail } of lista) {
-      try {
-        await ports.mail.send("apertura", email, { recompensa: mail });
-      } catch (e) {
-        console.error("mail apertura falló", email, e);
-      }
-    }
+    await programarATodos(ctx, campaniaId, "apertura");
   },
 });
 
 const DIA = 24 * 60 * 60 * 1000;
 
 // Cron diario: a 30 días del vencimiento, un aviso a quien todavía tenga
-// cafés. Una vez por persona (dedupe en avisosAdmin, send-then-mark).
+// cafés. La dedupe vive en enviarMail, así que correr de más no duplica.
 export const avisarVencimientos = internalAction({
   args: { ahora: v.optional(v.number()) },
   handler: async (ctx, args) => {
-    const ports = resolvePorts();
-    if (!ports.mail) return;
     const ahora = args.ahora ?? Date.now();
     const campanias = await ctx.runQuery(internal.recompensas.conApertura, {});
     for (const c of campanias) {
       const vence = vencimiento(c.aperturaAt);
       if (ahora < vence - 30 * DIA || ahora >= vence) continue;
-      const lista = await ctx.runQuery(internal.recompensas.conSaldo, { campaniaId: c._id });
-      for (const { id, email, mail } of lista) {
-        const clave = `vence:${id}`;
-        if (await ctx.runQuery(internal.contributionsInternal.avisoEnviado, { clave })) continue;
-        try {
-          await ports.mail.send("vence_pronto", email, { recompensa: mail });
-          await ctx.runMutation(internal.contributionsInternal.registrarAviso, { clave });
-        } catch (e) {
-          console.error("mail vence_pronto falló", email, e);
-        }
-      }
+      await programarATodos(ctx, c._id, "vence_pronto");
     }
   },
 });
@@ -192,6 +221,11 @@ async function campaniaPorSlug(ctx: Lector, slug: string) {
     .withIndex("by_slug", (q) => q.eq("slug", slug))
     .unique();
 }
+
+export const campania = internalQuery({
+  args: { slug: v.string() },
+  handler: async (ctx, { slug }) => await campaniaPorSlug(ctx, slug),
+});
 
 export const porEmail = internalQuery({
   args: { slug: v.string(), email: v.string() },

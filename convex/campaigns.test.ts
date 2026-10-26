@@ -1058,7 +1058,7 @@ test("canje: el código corto encuentra el QR solo con sesión", async () => {
   const token = await sesionStaff(t);
   const sinPrefijo = r.codigo.replace("JUJ-", "").toLowerCase();
   expect(await t.query(api.staff.buscarCodigo, { codigo: sinPrefijo, token })).toBe(r.qrId);
-  expect(await t.query(internal.staff.resumenRecompensas, { slug: "jujuy" })).toMatchObject({
+  expect(await t.action(internal.staff.resumenRecompensas, { slug: "jujuy" })).toMatchObject({
     personas: 1,
     emitidos: 3,
     canjeados: 0,
@@ -1107,11 +1107,14 @@ test("mail: fijarApertura avisa a quien tiene cafés; el vencimiento avisa una s
   const DIA_MS = 24 * 60 * 60 * 1000;
   const casiVence = apertura + 170 * DIA_MS;
   await t.action(internal.recompensas.avisarVencimientos, { ahora: casiVence });
+  await drenar(t);
   await t.action(internal.recompensas.avisarVencimientos, { ahora: casiVence + DIA_MS });
+  await drenar(t);
   expect(mailMemoria.conDatos.filter((m) => m.kind === "vence_pronto")).toHaveLength(1);
   // Lejos del vencimiento no avisa.
   mailMemoria.conDatos.length = 0;
   await t.action(internal.recompensas.avisarVencimientos, { ahora: apertura + 10 * DIA_MS });
+  await drenar(t);
   expect(mailMemoria.conDatos).toHaveLength(0);
 });
 
@@ -1173,3 +1176,40 @@ test("staff: un PIN de menos de 6 dígitos deja el acceso deshabilitado", async 
   ).rejects.toThrow("STAFF_NO_CONFIGURADO");
   process.env.STAFF_PIN = "482193";
 });
+
+test("escala: la apertura llega a todos aunque sean más que una página", async () => {
+  const t = convexTest(schema, modules);
+  setPortsForTesting(puertos(null));
+  const N = 450;
+  await t.run(async (ctx) => {
+    const campaniaId = await ctx.db.insert("campaigns", {
+      slug: "jujuy",
+      metaCentavos: 500_000,
+      recaudadoNetoCentavos: N * 500_000,
+      contribuyentes: N,
+      cumplidaAt: Date.now(),
+    });
+    for (let i = 0; i < N; i++) {
+      const email = `p${String(i).padStart(4, "0")}@x.com`;
+      await ctx.db.insert("contribuciones", {
+        campaniaId,
+        token: `t${i}`,
+        via: "mp",
+        estado: "aprobada",
+        aporteCentavos: 500_000,
+        email,
+        acreditadaAt: Date.now(),
+        createdAt: Date.now(),
+      });
+      await ctx.db.insert("recompensas", { campaniaId, email, qrId: `q${i}`, codigo: `JUJ-${i}`, createdAt: Date.now() });
+    }
+  });
+  mailMemoria.conDatos.length = 0;
+  await t.mutation(internal.recompensas.fijarApertura, { slug: "jujuy", aperturaAt: Date.now() });
+  await drenar(t);
+  expect(mailMemoria.conDatos.filter((m) => m.kind === "apertura")).toHaveLength(N);
+  expect(await t.action(internal.staff.resumenRecompensas, { slug: "jujuy" })).toMatchObject({
+    personas: N,
+    emitidos: N,
+  });
+}, 60_000);

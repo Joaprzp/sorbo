@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { action, query } from "./_generated/server";
 import { internal } from "./_generated/api";
+import { estadoContribucion } from "./schema";
 import { resolvePorts } from "./_lib/ports";
 import { CHAINS_SOPORTADAS, MIN_MP_CENTAVOS, MIN_USD_CENTS } from "./_lib/dominio";
 import { normalizarEmail } from "./_lib/recompensa";
@@ -31,6 +32,19 @@ export const contribuir = action({
       }),
     ),
   },
+  returns: v.object({
+    token: v.string(),
+    intent: v.union(
+      v.object({ kind: v.literal("redirect"), url: v.string() }),
+      v.object({
+        kind: v.literal("deposit"),
+        address: v.string(),
+        chains: v.array(v.string()),
+        minUsdCents: v.number(),
+      }),
+      v.object({ kind: v.literal("noop") }),
+    ),
+  }),
   handler: async (ctx, args): Promise<{ token: string; intent: Intent }> => {
     if (args.website) {
       return { token: "ok", intent: { kind: "noop" as const } };
@@ -118,12 +132,13 @@ export const contribuir = action({
 // El contribuyente vuelve de MP: la misma verdad-GET que el webhook.
 export const reconciliar = action({
   args: { token: v.string(), txHash: v.optional(v.string()) },
+  returns: v.null(),
   handler: async (ctx, { token, txHash }) => {
     const c = await ctx.runQuery(
       internal.contributionsInternal.porToken,
       { token },
     );
-    if (!c || (c.estado !== "pendiente" && c.estado !== "expirada")) return;
+    if (!c || (c.estado !== "pendiente" && c.estado !== "expirada")) return null;
     if (c.via === "mp" && c.mpOrderId) {
       await ctx.runAction(internal.contributionsInternal.sincronizarMpPorOrden, {
         mpOrderId: c.mpOrderId,
@@ -134,11 +149,23 @@ export const reconciliar = action({
         txHash,
       });
     }
+    return null;
   },
 });
 
 export const seguimiento = query({
   args: { token: v.string() },
+  returns: v.union(
+    v.null(),
+    v.object({
+      estado: estadoContribucion,
+      via: v.union(v.literal("mp"), v.literal("crypto")),
+      montoCentavos: v.optional(v.number()),
+      aporteCentavos: v.optional(v.number()),
+      acreditadaAt: v.optional(v.number()),
+      checkoutUrl: v.optional(v.string()),
+    }),
+  ),
   handler: async (ctx, { token }) => {
     const c = await ctx.db
       .query("contribuciones")

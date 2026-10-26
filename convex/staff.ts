@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
+import { internalAction, internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import type { GenericDatabaseReader, GenericDatabaseWriter } from "convex/server";
 import type { DataModel, Doc } from "./_generated/dataModel";
 import { internal } from "./_generated/api";
@@ -22,6 +22,14 @@ const FALLIDOS_DISPOSITIVO = 5;
 const FALLIDOS_GLOBAL = 20;
 const PIN_MINIMO = 6;
 const DESHACER_MS = 5 * MIN;
+
+const estadoV = v.union(
+  v.literal("reservado"),
+  v.literal("confirmado"),
+  v.literal("activo"),
+  v.literal("vencido"),
+  v.literal("anulado"),
+);
 
 async function sha256(texto: string): Promise<string> {
   const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(texto));
@@ -83,6 +91,10 @@ async function registrarFallo(ctx: Escritor, clave: string, umbral: number, ahor
 // revertiría el contador de fallidos y el bloqueo nunca llegaría.
 export const ingresar = mutation({
   args: { pin: v.string(), nombre: v.string(), clave: v.string() },
+  returns: v.union(
+    v.object({ token: v.string() }),
+    v.object({ error: v.union(v.literal("PIN_INCORRECTO"), v.literal("PIN_BLOQUEADO")) }),
+  ),
   handler: async (ctx, { pin, nombre, clave }) => {
     const esperado = process.env.STAFF_PIN;
     if (!esperado || esperado.length < PIN_MINIMO) throw new Error("STAFF_NO_CONFIGURADO");
@@ -121,6 +133,7 @@ export const ingresar = mutation({
 
 export const sesion = query({
   args: { token: v.optional(v.string()) },
+  returns: v.union(v.null(), v.object({ nombre: v.string(), venceAt: v.number() })),
   handler: async (ctx, { token }) => {
     const d = await dispositivoDe(ctx, token, Date.now());
     return d ? { nombre: d.nombre, venceAt: d.venceAt } : null;
@@ -131,6 +144,30 @@ export const sesion = query({
 // de staff suma el código y los canjes recientes para poder deshacer.
 export const ver = query({
   args: { qrId: v.string(), token: v.optional(v.string()) },
+  returns: v.union(
+    v.null(),
+    v.object({
+      saldo: v.number(),
+      cafes: v.number(),
+      estado: estadoV,
+      venceAt: v.optional(v.number()),
+      staff: v.union(
+        v.null(),
+        v.object({
+          codigo: v.string(),
+          canjes: v.array(
+            v.object({
+              id: v.id("canjes"),
+              cantidad: v.number(),
+              at: v.number(),
+              deshecho: v.boolean(),
+              deshacible: v.boolean(),
+            }),
+          ),
+        }),
+      ),
+    }),
+  ),
   handler: async (ctx, { qrId, token }) => {
     const r = await ctx.db
       .query("recompensas")
@@ -164,6 +201,7 @@ export const ver = query({
 
 export const buscarCodigo = query({
   args: { codigo: v.string(), token: v.string() },
+  returns: v.union(v.string(), v.null()),
   handler: async (ctx, { codigo, token }) => {
     if (!(await dispositivoDe(ctx, token, Date.now()))) throw new Error("SIN_SESION");
     const limpio = codigo.trim().toUpperCase().replace(/^JUJ-?/, "");
@@ -179,6 +217,7 @@ export const buscarCodigo = query({
 // ve el saldo ya descontado.
 export const canjear = mutation({
   args: { qrId: v.string(), cantidad: v.number(), token: v.string() },
+  returns: v.object({ saldo: v.number() }),
   handler: async (ctx, { qrId, cantidad, token }) => {
     const ahora = Date.now();
     const d = await dispositivoDe(ctx, token, ahora);
@@ -200,6 +239,7 @@ export const canjear = mutation({
 
 export const deshacer = mutation({
   args: { canjeId: v.id("canjes"), token: v.string() },
+  returns: v.null(),
   handler: async (ctx, { canjeId, token }) => {
     const ahora = Date.now();
     if (!(await dispositivoDe(ctx, token, ahora))) throw new Error("SIN_SESION");
@@ -208,6 +248,7 @@ export const deshacer = mutation({
       throw new Error("NO_DESHACIBLE");
     }
     await ctx.db.patch(canjeId, { deshechoAt: ahora });
+    return null;
   },
 });
 
@@ -222,26 +263,42 @@ export const revocarDispositivo = internalMutation({
   },
 });
 
-export const resumenRecompensas = internalQuery({
-  args: { slug: v.string() },
-  handler: async (ctx, { slug }) => {
-    const campania = await ctx.db
-      .query("campaigns")
-      .withIndex("by_slug", (q) => q.eq("slug", slug))
-      .unique();
-    if (!campania) return null;
-    const recompensas = await ctx.db
+// Desde `bunx convex run`: suma por páginas para no pasar el límite de lecturas.
+export const resumenPagina = internalQuery({
+  args: { campaniaId: v.id("campaigns"), cursor: v.union(v.string(), v.null()) },
+  handler: async (ctx, { campaniaId, cursor }) => {
+    const p = await ctx.db
       .query("recompensas")
-      .withIndex("by_campania_email", (q) => q.eq("campaniaId", campania._id))
-      .collect();
+      .withIndex("by_campania_email", (q) => q.eq("campaniaId", campaniaId))
+      .paginate({ numItems: 100, cursor });
     const ahora = Date.now();
     let emitidos = 0;
     let canjeados = 0;
-    for (const r of recompensas) {
+    for (const r of p.page) {
       const s = await saldoDe(ctx, r, ahora);
       emitidos += s.cafes;
       canjeados += s.canjeados;
     }
-    return { personas: recompensas.length, emitidos, canjeados, pendientes: emitidos - canjeados };
+    return { personas: p.page.length, emitidos, canjeados, isDone: p.isDone, continueCursor: p.continueCursor };
+  },
+});
+
+export const resumenRecompensas = internalAction({
+  args: { slug: v.string() },
+  handler: async (ctx, { slug }) => {
+    const campania = await ctx.runQuery(internal.recompensas.campania, { slug });
+    if (!campania) return null;
+    const total = { personas: 0, emitidos: 0, canjeados: 0 };
+    let cursor: string | null = null;
+    for (;;) {
+      const p: { personas: number; emitidos: number; canjeados: number; isDone: boolean; continueCursor: string } =
+        await ctx.runQuery(internal.staff.resumenPagina, { campaniaId: campania._id, cursor });
+      total.personas += p.personas;
+      total.emitidos += p.emitidos;
+      total.canjeados += p.canjeados;
+      if (p.isDone) break;
+      cursor = p.continueCursor;
+    }
+    return { ...total, pendientes: total.emitidos - total.canjeados };
   },
 });

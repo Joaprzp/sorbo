@@ -5,9 +5,10 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export const join = mutation({
   args: { email: v.string(), website: v.optional(v.string()) },
+  returns: v.null(),
   handler: async (ctx, args) => {
     if (args.website) {
-      return;
+      return null;
     }
     const email = args.email.trim().toLowerCase();
     if (!EMAIL_RE.test(email)) {
@@ -20,5 +21,6 @@ export const join = mutation({
     if (!existing) {
       await ctx.db.insert("waitlist", { email, createdAt: Date.now() });
     }
+    return null;
   },
 });

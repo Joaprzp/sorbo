@@ -9,6 +9,24 @@ import {
 
 export const progreso = query({
   args: { slug: v.string() },
+  returns: v.union(
+    v.null(),
+    v.object({
+      metaCentavos: v.number(),
+      recaudadoNetoCentavos: v.number(),
+      contribuyentes: v.number(),
+      cumplida: v.boolean(),
+      minMpCentavos: v.number(),
+      sugeridosCentavos: v.array(v.number()),
+      rails: v.object({
+        mp: v.boolean(),
+        crypto: v.union(
+          v.null(),
+          v.object({ address: v.string(), chains: v.array(v.string()), minUsdCents: v.number() }),
+        ),
+      }),
+    }),
+  ),
   handler: async (ctx, { slug }) => {
     const c = await ctx.db
       .query("campaigns")

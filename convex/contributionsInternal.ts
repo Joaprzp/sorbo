@@ -143,21 +143,22 @@ export const acreditar = internalMutation({
   },
 });
 
+// Por página: una campaña puede tener miles de filas (contando pendientes y
+// expiradas). El índice ordena por email, así los repetidos quedan juntos.
 export const contribuyentesConEmail = internalQuery({
-  args: { campaniaId: v.id("campaigns") },
-  handler: async (ctx, { campaniaId }) => {
-    const rows = await ctx.db
+  args: { campaniaId: v.id("campaigns"), cursor: v.union(v.string(), v.null()) },
+  handler: async (ctx, { campaniaId, cursor }) => {
+    const pagina = await ctx.db
       .query("contribuciones")
-      .filter((q) => q.eq(q.field("campaniaId"), campaniaId))
-      .collect();
-    return [
-      ...new Set(
-        rows
-          .filter((r) => r.estado === "aprobada" || r.estado === "devuelta")
-          .map((r) => r.email)
-          .filter((e): e is string => !!e),
-      ),
-    ];
+      .withIndex("by_campania_email", (q) => q.eq("campaniaId", campaniaId).gt("email", ""))
+      .paginate({ numItems: 500, cursor });
+    return {
+      emails: pagina.page
+        .filter((r) => r.estado === "aprobada" || r.estado === "devuelta")
+        .map((r) => r.email!),
+      isDone: pagina.isDone,
+      continueCursor: pagina.continueCursor,
+    };
   },
 });
 
@@ -167,16 +168,26 @@ export const anunciarMetaCumplida = internalAction({
   handler: async (ctx, { campaniaId, metaCentavos }) => {
     const ports = resolvePorts();
     if (ports.mail) {
-      const emails = await ctx.runQuery(
-        internal.contributionsInternal.contribuyentesConEmail,
-        { campaniaId },
-      );
-      for (const to of emails) {
-        const recompensa = await ctx.runQuery(internal.recompensas.paraMail, {
-          campaniaId,
-          email: to,
-        });
-        await ports.mail.send("meta_cumplida", to, recompensa ? { recompensa } : {});
+      // Un mail por acción programada: uno que falla no frena al resto.
+      const vistos = new Set<string>();
+      let cursor: string | null = null;
+      for (;;) {
+        const pagina: { emails: string[]; isDone: boolean; continueCursor: string } =
+          await ctx.runQuery(internal.contributionsInternal.contribuyentesConEmail, {
+            campaniaId,
+            cursor,
+          });
+        for (const to of pagina.emails) {
+          if (vistos.has(to)) continue;
+          vistos.add(to);
+          await ctx.scheduler.runAfter(0, internal.recompensas.enviarMail, {
+            kind: "meta_cumplida",
+            campaniaId,
+            email: to,
+          });
+        }
+        if (pagina.isDone) break;
+        cursor = pagina.continueCursor;
       }
     }
     if (metaCentavos !== undefined) {
@@ -681,13 +692,11 @@ export const reembolsosEstancados = internalQuery({
   handler: async (ctx, { antesDe }) => {
     const rows = await ctx.db
       .query("contribuciones")
-      .withIndex("by_devolucion", (q) =>
-        q.eq("via", "mp").eq("estado", "aprobada"),
-      )
+      .withIndex("by_refund", (q) => q.eq("refundEstado", "pendiente").eq("via", "mp"))
       .collect();
     return rows.filter(
       (c) =>
-        c.refundEstado === "pendiente" &&
+        c.estado === "aprobada" &&
         (c.refundIntentos ?? 0) < 3 &&
         c.acreditadaAt !== undefined &&
         c.acreditadaAt < antesDe,
@@ -733,13 +742,9 @@ export const reembolsosAgotados = internalQuery({
   handler: async (ctx) => {
     const rows = await ctx.db
       .query("contribuciones")
-      .withIndex("by_devolucion", (q) =>
-        q.eq("via", "mp").eq("estado", "aprobada"),
-      )
+      .withIndex("by_refund", (q) => q.eq("refundEstado", "pendiente").eq("via", "mp"))
       .collect();
-    return rows.filter(
-      (c) => c.refundEstado === "pendiente" && (c.refundIntentos ?? 0) >= 3,
-    );
+    return rows.filter((c) => c.estado === "aprobada" && (c.refundIntentos ?? 0) >= 3);
   },
 });
 

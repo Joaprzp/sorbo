@@ -1,7 +1,7 @@
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 
-const estadoContribucion = v.union(
+export const estadoContribucion = v.union(
   v.literal("pendiente"),
   v.literal("aprobada"),
   v.literal("devuelta"),
@@ -53,7 +53,8 @@ export default defineSchema({
     .index("by_mpOrderId", ["mpOrderId"])
     .index("by_txHash", ["txHash"])
     .index("by_devolucion", ["via", "estado", "acreditadaAt"])
-    .index("by_campania_email", ["campaniaId", "email"]),
+    .index("by_campania_email", ["campaniaId", "email"])
+    .index("by_refund", ["refundEstado", "via"]),
 
   // ADR-0008: una fila por persona y campaña. Los cafés no se guardan: salen
   // de sumar sus aportes aprobados; acá solo viven los identificadores.
