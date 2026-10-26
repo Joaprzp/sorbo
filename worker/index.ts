@@ -13,6 +13,12 @@ export default {
       return Response.redirect(url.toString(), 301);
     }
     const res = await env.ASSETS.fetch(request);
+    // El QR es al portador: sus URLs y el acceso del staff no se indexan.
+    if (url.pathname.startsWith("/canje/") || url.pathname === "/staff") {
+      const privada = new Response(res.body, res);
+      privada.headers.set("X-Robots-Tag", "noindex, nofollow");
+      return privada;
+    }
     const meta = metaDeRuta(url.pathname);
     if (meta && res.headers.get("content-type")?.includes("text/html")) {
       return conMeta(res, meta);

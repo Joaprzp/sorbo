@@ -11,6 +11,8 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as JujuyRouteImport } from './routes/jujuy'
+import { Route as StaffRouteImport } from './routes/staff'
+import { Route as CanjeIdRouteImport } from './routes/canje.$id'
 import { Route as JujuyAporteRouteImport } from './routes/jujuy_.aporte'
 import { Route as JujuyNumerosRouteImport } from './routes/jujuy_.numeros'
 
@@ -22,6 +24,16 @@ const IndexRoute = IndexRouteImport.update({
 const JujuyRoute = JujuyRouteImport.update({
   id: '/jujuy',
   path: '/jujuy',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const StaffRoute = StaffRouteImport.update({
+  id: '/staff',
+  path: '/staff',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CanjeIdRoute = CanjeIdRouteImport.update({
+  id: '/canje/$id',
+  path: '/canje/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
 const JujuyAporteRoute = JujuyAporteRouteImport.update({
@@ -38,12 +50,16 @@ const JujuyNumerosRoute = JujuyNumerosRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/jujuy': typeof JujuyRoute
+  '/staff': typeof StaffRoute
+  '/canje/$id': typeof CanjeIdRoute
   '/jujuy/aporte': typeof JujuyAporteRoute
   '/jujuy/numeros': typeof JujuyNumerosRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/jujuy': typeof JujuyRoute
+  '/staff': typeof StaffRoute
+  '/canje/$id': typeof CanjeIdRoute
   '/jujuy/aporte': typeof JujuyAporteRoute
   '/jujuy/numeros': typeof JujuyNumerosRoute
 }
@@ -51,20 +67,43 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/jujuy': typeof JujuyRoute
+  '/staff': typeof StaffRoute
+  '/canje/$id': typeof CanjeIdRoute
   '/jujuy_/aporte': typeof JujuyAporteRoute
   '/jujuy_/numeros': typeof JujuyNumerosRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/jujuy' | '/jujuy/aporte' | '/jujuy/numeros'
+  fullPaths:
+    | '/'
+    | '/jujuy'
+    | '/staff'
+    | '/canje/$id'
+    | '/jujuy/aporte'
+    | '/jujuy/numeros'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/jujuy' | '/jujuy/aporte' | '/jujuy/numeros'
-  id: '__root__' | '/' | '/jujuy' | '/jujuy_/aporte' | '/jujuy_/numeros'
+  to:
+    | '/'
+    | '/jujuy'
+    | '/staff'
+    | '/canje/$id'
+    | '/jujuy/aporte'
+    | '/jujuy/numeros'
+  id:
+    | '__root__'
+    | '/'
+    | '/jujuy'
+    | '/staff'
+    | '/canje/$id'
+    | '/jujuy_/aporte'
+    | '/jujuy_/numeros'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   JujuyRoute: typeof JujuyRoute
+  StaffRoute: typeof StaffRoute
+  CanjeIdRoute: typeof CanjeIdRoute
   JujuyAporteRoute: typeof JujuyAporteRoute
   JujuyNumerosRoute: typeof JujuyNumerosRoute
 }
@@ -83,6 +122,20 @@ declare module '@tanstack/react-router' {
       path: '/jujuy'
       fullPath: '/jujuy'
       preLoaderRoute: typeof JujuyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/staff': {
+      id: '/staff'
+      path: '/staff'
+      fullPath: '/staff'
+      preLoaderRoute: typeof StaffRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/canje/$id': {
+      id: '/canje/$id'
+      path: '/canje/$id'
+      fullPath: '/canje/$id'
+      preLoaderRoute: typeof CanjeIdRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/jujuy_/aporte': {
@@ -105,6 +158,8 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   JujuyRoute: JujuyRoute,
+  StaffRoute: StaffRoute,
+  CanjeIdRoute: CanjeIdRoute,
   JujuyAporteRoute: JujuyAporteRoute,
   JujuyNumerosRoute: JujuyNumerosRoute,
 }

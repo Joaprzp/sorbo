@@ -799,6 +799,8 @@ export const avisarAdmin = internalAction({
       v.literal("aporte"),
       v.literal("reembolso_fallido"),
       v.literal("cripto_rechazada"),
+      v.literal("staff_bloqueado"),
+      v.literal("apertura"),
     ),
     contribucionId: v.optional(v.id("contribuciones")),
     detalle: v.optional(v.string()),
@@ -831,6 +833,18 @@ export const avisarAdmin = internalAction({
           clave: args.clave,
         });
       }
+      return;
+    }
+
+    if (args.kind === "staff_bloqueado" || args.kind === "apertura") {
+      await ports.push.push({
+        title: args.kind === "apertura" ? "SORBO · APERTURA FIJADA" : "SORBO · PIN BLOQUEADO",
+        message: args.detalle ?? "",
+        threadId: "sorbo",
+        sound: args.kind === "apertura" ? "cha_ching" : "warm_soft_error",
+        openUrl: `${base}/staff`,
+        ...(args.kind === "staff_bloqueado" ? { interruptionLevel: "time-sensitive" as const } : {}),
+      });
       return;
     }
 

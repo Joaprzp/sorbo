@@ -73,6 +73,14 @@ export default defineSchema({
     revocadoAt: v.optional(v.number()),
   }).index("by_tokenHash", ["tokenHash"]),
 
+  // Bloqueo por PIN: una fila por dispositivo ("disp:<clave>") y una global.
+  intentosPin: defineTable({
+    clave: v.string(),
+    fallidos: v.number(),
+    desde: v.number(),
+    bloqueadoHasta: v.optional(v.number()),
+  }).index("by_clave", ["clave"]),
+
   canjes: defineTable({
     recompensaId: v.id("recompensas"),
     cantidad: v.number(),

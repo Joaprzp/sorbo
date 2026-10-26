@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { internalMutation, internalQuery } from "./_generated/server";
+import { internal } from "./_generated/api";
 import type { GenericDatabaseReader, GenericDatabaseWriter } from "convex/server";
 import type { DataModel, Doc, Id } from "./_generated/dataModel";
 import {
@@ -82,6 +83,9 @@ export async function saldoDe(ctx: Lector, r: Doc<"recompensas">, ahora: number)
   };
 }
 
+const fecha = (ms: number) =>
+  new Date(ms).toLocaleDateString("es-AR", { timeZone: "America/Argentina/Buenos_Aires" });
+
 async function campaniaPorSlug(ctx: Lector, slug: string) {
   return await ctx.db
     .query("campaigns")
@@ -113,6 +117,10 @@ export const fijarApertura = internalMutation({
     if (!campania) throw new Error("CAMPANIA_NO_EXISTE");
     if (campania.cumplidaAt === undefined) throw new Error("META_NO_CUMPLIDA");
     await ctx.db.patch(campania._id, { aperturaAt });
+    await ctx.scheduler.runAfter(0, internal.contributionsInternal.avisarAdmin, {
+      kind: "apertura",
+      detalle: `Canje habilitado del ${fecha(aperturaAt)} al ${fecha(vencimiento(aperturaAt))}`,
+    });
   },
 });
 

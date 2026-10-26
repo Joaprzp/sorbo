@@ -958,3 +958,104 @@ test("recompensa: completarRecompensas cubre aportes previos con email", async (
   expect(n).toBe(1);
   expect(await recompensaDe(t, "e@e.com")).toMatchObject({ cafes: 1 });
 });
+
+// --- staff y canje (ADR-0008) ---
+
+async function conApertura(t: ReturnType<typeof convexTest>, email = "s@s.com", monto = 2_500_000) {
+  await t.run(async (ctx) => {
+    await ctx.db.insert("campaigns", {
+      slug: "jujuy",
+      metaCentavos: 500_000,
+      recaudadoNetoCentavos: 0,
+      contribuyentes: 0,
+    });
+  });
+  await acreditar(t, monto, { email });
+  await drenar(t);
+  await t.mutation(internal.recompensas.fijarApertura, { slug: "jujuy", aperturaAt: Date.now() - 1000 });
+  await drenar(t);
+  const r = await t.query(internal.recompensas.porEmail, { slug: "jujuy", email });
+  return r!;
+}
+
+async function sesionStaff(t: ReturnType<typeof convexTest>, clave = "tablet") {
+  const r = await t.mutation(api.staff.ingresar, { pin: "4821", nombre: "Tablet barra", clave });
+  if (!r.token) throw new Error(r.error);
+  return r.token;
+}
+
+test("staff: PIN correcto abre sesión; el QR público no muestra el código", async () => {
+  process.env.STAFF_PIN = "4821";
+  const t = convexTest(schema, modules);
+  const r = await conApertura(t);
+  const publico = await t.query(api.staff.ver, { qrId: r.qrId });
+  expect(publico).toMatchObject({ saldo: 3, estado: "activo", staff: null });
+  const token = await sesionStaff(t);
+  expect(await t.query(api.staff.sesion, { token })).toMatchObject({ nombre: "Tablet barra" });
+  const conStaff = await t.query(api.staff.ver, { qrId: r.qrId, token });
+  expect(conStaff!.staff!.codigo).toBe(r.codigo);
+});
+
+test("staff: 5 PIN incorrectos bloquean el dispositivo y avisan al admin", async () => {
+  process.env.STAFF_PIN = "4821";
+  const t = convexTest(schema, modules);
+  setPortsForTesting(puertos(null));
+  pushMemoria.enviados.length = 0;
+  for (let i = 0; i < 5; i++) {
+    expect(await t.mutation(api.staff.ingresar, { pin: "0000", nombre: "x", clave: "cel" })).toEqual({
+      error: "PIN_INCORRECTO",
+    });
+  }
+  expect(await t.mutation(api.staff.ingresar, { pin: "4821", nombre: "x", clave: "cel" })).toEqual({
+    error: "PIN_BLOQUEADO",
+  });
+  // Otro dispositivo sigue pudiendo entrar.
+  await sesionStaff(t, "otro");
+  await drenar(t);
+  expect(pushMemoria.enviados.map((p) => p.title)).toContain("SORBO · PIN BLOQUEADO");
+});
+
+test("canje: descuenta, no deja pasar del saldo y se puede deshacer", async () => {
+  process.env.STAFF_PIN = "4821";
+  const t = convexTest(schema, modules);
+  const r = await conApertura(t); // $25.000 → 3 cafés
+  const token = await sesionStaff(t);
+  expect(await t.mutation(api.staff.canjear, { qrId: r.qrId, cantidad: 2, token })).toEqual({ saldo: 1 });
+  await expect(
+    t.mutation(api.staff.canjear, { qrId: r.qrId, cantidad: 2, token }),
+  ).rejects.toThrow("CANTIDAD_INVALIDA");
+  const v = await t.query(api.staff.ver, { qrId: r.qrId, token });
+  expect(v!.saldo).toBe(1);
+  await t.mutation(api.staff.deshacer, { canjeId: v!.staff!.canjes[0].id, token });
+  expect((await t.query(api.staff.ver, { qrId: r.qrId }))!.saldo).toBe(3);
+});
+
+test("canje: sin sesión, revocada o antes de la apertura no se puede", async () => {
+  process.env.STAFF_PIN = "4821";
+  const t = convexTest(schema, modules);
+  await campania(t); // meta lejos: sin apertura posible
+  await acreditar(t, 500_000, { email: "z@z.com" });
+  const r = (await t.query(internal.recompensas.porEmail, { slug: "jujuy", email: "z@z.com" }))!;
+  const token = await sesionStaff(t);
+  await expect(t.mutation(api.staff.canjear, { qrId: r.qrId, cantidad: 1, token })).rejects.toThrow("NO_ACTIVO");
+  await expect(
+    t.mutation(api.staff.canjear, { qrId: r.qrId, cantidad: 1, token: "falso" }),
+  ).rejects.toThrow("SIN_SESION");
+  await t.mutation(internal.staff.revocarDispositivo, { nombre: "Tablet barra" });
+  expect(await t.query(api.staff.sesion, { token })).toBeNull();
+});
+
+test("canje: el código corto encuentra el QR solo con sesión", async () => {
+  process.env.STAFF_PIN = "4821";
+  const t = convexTest(schema, modules);
+  const r = await conApertura(t);
+  await expect(t.query(api.staff.buscarCodigo, { codigo: r.codigo, token: "x" })).rejects.toThrow("SIN_SESION");
+  const token = await sesionStaff(t);
+  const sinPrefijo = r.codigo.replace("JUJ-", "").toLowerCase();
+  expect(await t.query(api.staff.buscarCodigo, { codigo: sinPrefijo, token })).toBe(r.qrId);
+  expect(await t.query(internal.staff.resumenRecompensas, { slug: "jujuy" })).toMatchObject({
+    personas: 1,
+    emitidos: 3,
+    canjeados: 0,
+  });
+});
