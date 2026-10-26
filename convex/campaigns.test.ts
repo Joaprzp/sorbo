@@ -458,6 +458,8 @@ test("el barrido de devoluciones es idempotente", async () => {
 
 process.env.EVM_ADDRESS = "0xSORBOEVM";
 
+const DONANTE = "0x00000000000000000000000000000000000d0aa7";
+
 const txBase = (over: Partial<import("./_lib/ports").EvmTransfer> = {}) => ({
   chain: "base",
   txHash: "0xabc1",
@@ -467,6 +469,7 @@ const txBase = (over: Partial<import("./_lib/ports").EvmTransfer> = {}) => ({
   usdCents: 1000, // 10 USDC
   confirmations: 12,
   blockAt: Date.now() + 60_000, // por defecto, la transfer llega después del aviso
+  from: DONANTE,
   ...over,
 });
 
@@ -952,7 +955,7 @@ test("recompensa: cripto cuenta en pesos a MEP del día", async () => {
   setPortsForTesting(puertos(null, evm));
   await t.action(api.contributions.contribuir, {
     slug: "jujuy",
-    via: { rail: "crypto", chainId: "base", txHash: "0xcafe", email: "d@d.com" },
+    via: { rail: "crypto", chainId: "base", txHash: "0xcafe", email: "d@d.com", desde: DONANTE },
   });
   await drenar(t);
   // 50 USD × $1.200 = $60.000 → 1 + 5 = 6 cafés
@@ -1143,7 +1146,7 @@ test("recompensa: dos reclamos de la misma transfer no duplican cafés", async (
   for (const email of ["p@p.com", "p@p.com", "q@q.com"]) {
     await t.action(api.contributions.contribuir, {
       slug: "jujuy",
-      via: { rail: "crypto", chainId: "base", txHash: "0xdoble", email },
+      via: { rail: "crypto", chainId: "base", txHash: "0xdoble", email, desde: DONANTE },
     });
     await drenar(t);
   }
@@ -1331,4 +1334,68 @@ test("cripto: una fila observada que quedó pendiente por un crash se acredita e
   });
   await drenar(t);
   expect((await t.query(api.campaigns.progreso, { slug: "jujuy" }))!.recaudadoNetoCentavos).toBe(1_200_000);
+});
+
+// --- A2: el aviso declara la wallet de origen ---
+
+async function avisar(t: ReturnType<typeof nuevoTest>, email: string, desde: string) {
+  await t.action(api.contributions.contribuir, {
+    slug: "jujuy",
+    via: { rail: "crypto", chainId: "base", email, desde },
+  });
+}
+
+async function escanear(t: ReturnType<typeof nuevoTest>, tx: ReturnType<typeof txBase>) {
+  const evm = new EvmFake();
+  evm.transfers.push(tx);
+  setPortsForTesting(puertos(null, evm));
+  await t.action(internal.contributionsInternal.escanearCrypto, {});
+  await drenar(t);
+}
+
+test("A2: avisar con la wallet y mandar; el scan une solo, sin pegar el hash", async () => {
+  const t = nuevoTest();
+  await campania(t);
+  setPortsForTesting(puertos(null, new EvmFake()));
+  await avisar(t, "a2@x.com", DONANTE.toUpperCase().replace("0X", "0x"));
+  await escanear(t, txBase({ txHash: "0xa2", usdCents: 5000 }));
+  expect(await recompensaDe(t, "a2@x.com")).toMatchObject({ cafes: 6 });
+  const p = await t.query(api.campaigns.progreso, { slug: "jujuy" });
+  expect(p).toMatchObject({ recaudadoNetoCentavos: 6_000_000, contribuyentes: 1 });
+});
+
+test("A2: una transfer desde otra wallet no da cafés al que avisó", async () => {
+  const t = nuevoTest();
+  await campania(t);
+  setPortsForTesting(puertos(null, new EvmFake()));
+  await avisar(t, "b2@x.com", "0x1111111111111111111111111111111111111111");
+  await escanear(t, txBase({ txHash: "0xb2", usdCents: 5000 }));
+  expect((await recompensaDe(t, "b2@x.com"))?.cafes ?? 0).toBe(0);
+});
+
+test("A2: dos emails que avisan la misma wallet no reciben cafés", async () => {
+  const t = nuevoTest();
+  await campania(t);
+  setPortsForTesting(puertos(null, new EvmFake()));
+  await avisar(t, "dueno@x.com", DONANTE);
+  await avisar(t, "vivo@x.com", DONANTE);
+  await escanear(t, txBase({ txHash: "0xc2", usdCents: 5000 }));
+  expect((await recompensaDe(t, "dueno@x.com"))?.cafes ?? 0).toBe(0);
+  expect((await recompensaDe(t, "vivo@x.com"))?.cafes ?? 0).toBe(0);
+});
+
+test("A2: un aviso de más de 48 h antes del pago no cubre la transfer", async () => {
+  const t = nuevoTest();
+  await campania(t);
+  setPortsForTesting(puertos(null, new EvmFake()));
+  await avisar(t, "viejo@x.com", DONANTE);
+  await escanear(t, txBase({ txHash: "0xd2", usdCents: 5000, blockAt: Date.now() + 49 * 60 * 60 * 1000 }));
+  expect((await recompensaDe(t, "viejo@x.com"))?.cafes ?? 0).toBe(0);
+});
+
+test("A2: una wallet mal escrita se rechaza", async () => {
+  const t = nuevoTest();
+  await campania(t);
+  setPortsForTesting(puertos(null, new EvmFake()));
+  await expect(avisar(t, "x@x.com", "0x123")).rejects.toThrow("WALLET_INVALIDA");
 });

@@ -47,6 +47,8 @@ const contribucionCampos = {
   // del pago. Sin aviso previo no hay cafés: cualquiera ve la transfer on-chain.
   blockAt: v.optional(v.number()),
   avisoPrevio: v.optional(v.boolean()),
+  // Wallet de origen: la declarada en el aviso o la que mandó la transfer.
+  desde: v.optional(v.string()),
   createdAt: v.number(),
 };
 
@@ -77,6 +79,7 @@ export default defineSchema({
     .index("by_devolucion", ["via", "estado", "acreditadaAt"])
     .index("by_campania_email", ["campaniaId", "email"])
     .index("by_campania_email_estado", ["campaniaId", "email", "estado"])
+    .index("by_desde_estado", ["desde", "estado"])
     .index("by_refund", ["refundEstado", "via"]),
 
   // ADR-0008: una fila por persona y campaña. Los cafés no se guardan: salen

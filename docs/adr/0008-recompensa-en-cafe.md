@@ -49,9 +49,12 @@ El presupuesto no cambia: los cafés de recompensa se pagan con la operación,
 no con la meta. El peor caso (toda la meta con email y canjeada entera) está
 calculado y aceptado en las notas privadas.
 
-**Cripto:** el hash de una transfer es público apenas entra al bloque. Un
-aporte cripto da cafés solo si el aviso con email se dejó antes del bloque;
-si no, suma a la meta pero no a la recompensa.
+**Cripto:** la transfer y su hash son públicos apenas entran al bloque, así
+que la hora sola no ata un aviso a un pago. El aviso pide email y la wallet
+de origen; una transfer da cafés solo si sale de esa wallet y el aviso se
+dejó hasta 48 horas antes del bloque. El scan une solo el aviso con la
+transfer (sin pegar el hash). Si dos emails avisaron la misma wallet, no hay
+cafés para ninguno. Sin aviso válido el aporte suma a la meta igual.
 
 ## Consecuencias
 

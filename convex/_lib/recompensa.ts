@@ -16,11 +16,21 @@ export function cafesPorTotal(totalCentavos: number): number {
   return Math.min(TOPE_CAFES, 1 + extra);
 }
 
-// Cripto: el hash de una transfer es público apenas entra al bloque. Solo da
-// cafés si el aviso con email se dejó antes, así nadie reclama la de otro.
-export function avisoAntesDelPago(avisoAt: number, blockAt: number | undefined): boolean {
-  return blockAt !== undefined && avisoAt < blockAt;
+// Cripto: la transfer es pública, así que los cafés van a quien avisó antes
+// de pagar y declaró la wallet de origen. Mandar desde la wallet de otro no se
+// puede; el plazo corto acota a quien registre direcciones ajenas conocidas.
+export const AVISO_VALIDO_MS = 48 * 60 * 60 * 1000;
+
+export function avisoCubrePago(
+  aviso: { desde?: string; createdAt: number },
+  pago: { desde?: string; blockAt?: number },
+): boolean {
+  if (!aviso.desde || aviso.desde !== pago.desde || pago.blockAt === undefined) return false;
+  const antes = pago.blockAt - aviso.createdAt;
+  return antes > 0 && antes <= AVISO_VALIDO_MS;
 }
+
+export const esWallet = (s: string) => /^0x[0-9a-f]{40}$/.test(s);
 
 export function normalizarEmail(email: string): string {
   return email.trim().toLowerCase();

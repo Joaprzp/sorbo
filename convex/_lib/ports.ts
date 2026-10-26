@@ -38,6 +38,7 @@ export interface EvmTransfer {
   usdCents: number;
   confirmations: number;
   blockAt?: number; // hora del bloque (ms): decide si el aviso fue antes del pago
+  from?: string; // wallet que mandó, en minúsculas: ata el aviso a la transfer
 }
 
 export interface EvmPort {

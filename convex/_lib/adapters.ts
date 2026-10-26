@@ -193,6 +193,7 @@ export class EvmIndexerHttp implements EvmPort {
         asset?: string;
         value?: number | string;
         blockNum?: string;
+        from?: string;
         to?: string;
         metadata?: { blockTimestamp?: string };
         rawContract?: { address?: string; value?: string; decimal?: string };
@@ -214,6 +215,7 @@ export class EvmIndexerHttp implements EvmPort {
         usdCents: Math.round(Number(t.value ?? 0) * 100),
         confirmations: confs(t.blockNum),
         blockAt: t.metadata?.blockTimestamp ? Date.parse(t.metadata.blockTimestamp) : undefined,
+        from: t.from?.toLowerCase(),
       }));
     return { transfers: out, cursor: r?.pageKey };
   }
@@ -251,9 +253,10 @@ export class EvmIndexerHttp implements EvmPort {
         const topics: string[] = log.topics ?? [];
         if (topics[0] !== TRANSFER_TOPIC || topics.length < 3) continue;
         const to = `0x${topics[2].slice(-40)}`;
+        const from = `0x${topics[1].slice(-40)}`.toLowerCase();
         const raw = BigInt(log.data);
         const usdCents = Math.round(Number(raw) * 100 / 10 ** info.decimals);
-        const cand = { chain, txHash, to, asset, contract, usdCents, confirmations: confs, blockAt };
+        const cand = { chain, txHash, to, asset, contract, usdCents, confirmations: confs, blockAt, from };
         // En una tx multi-transfer nos quedamos con el log que nos paga a nosotros.
         if (address && to.toLowerCase() === address.toLowerCase()) return cand;
         primero ??= cand;

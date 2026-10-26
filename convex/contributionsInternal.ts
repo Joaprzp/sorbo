@@ -9,7 +9,7 @@ import { esTransferValida, esContratoSoportado, centavosPorUsd } from "./_lib/ev
 import { CHAINS_SOPORTADAS, MIN_USD_CENTS, TECHO_AVISO_USD_CENTS } from "./_lib/dominio";
 import { ars } from "../src/lib/format";
 import { asegurarRecompensa } from "./recompensas";
-import { avisoAntesDelPago } from "./_lib/recompensa";
+import { avisoCubrePago } from "./_lib/recompensa";
 import { campaniaDoc, contribucionDoc } from "./schema";
 import { recorrerPaginas } from "./_lib/paginas";
 
@@ -483,6 +483,7 @@ export const crearPendienteCrypto = internalMutation({
     slug: v.string(),
     chainId: v.string(),
     email: v.optional(v.string()),
+    desde: v.optional(v.string()),
   },
   returns: v.object({ id: v.id("contribuciones"), token: v.string() }),
   handler: async (ctx, args) => {
@@ -497,6 +498,7 @@ export const crearPendienteCrypto = internalMutation({
       estado: "pendiente",
       chain: args.chainId,
       email: args.email,
+      desde: args.desde,
       createdAt: ahora,
     });
     await evento(ctx, id, "creada", ahora);
@@ -560,6 +562,7 @@ export const reclamarTx = internalAction({
       usdCents: tx.usdCents,
       mepCentavosPorUsd: mep,
       blockAt: tx.blockAt,
+      desde: tx.from,
       aporteCentavos: centavosPorUsd(tx.usdCents, mep),
     });
     return null;
@@ -583,7 +586,7 @@ async function reclamoEn(
   await evento(ctx, c._id, "reclamo_ya_acreditado", ahora);
   // Los cafés van con la plata: el primer reclamo le da su email a la fila
   // de la transfer; uno posterior de la misma transfer no suma cafés.
-  if (c.email && !existente.email && avisoAntesDelPago(c.createdAt, existente.blockAt)) {
+  if (c.email && !existente.email && avisoCubrePago(c, existente)) {
     await ctx.db.patch(existente._id, { email: c.email, avisoPrevio: true });
     await asegurarRecompensa(ctx, c.campaniaId, c.email);
   }
@@ -615,6 +618,7 @@ export const vincularTx = internalMutation({
     usdCents: v.number(),
     mepCentavosPorUsd: v.number(),
     blockAt: v.optional(v.number()),
+    desde: v.optional(v.string()),
     aporteCentavos: v.number(),
   },
   returns: v.null(),
@@ -637,12 +641,35 @@ export const vincularTx = internalMutation({
       usdCents: args.usdCents,
       mepCentavosPorUsd: args.mepCentavosPorUsd,
       blockAt: args.blockAt,
-      avisoPrevio: avisoAntesDelPago(c.createdAt, args.blockAt),
+      // La fila pasa a ser la de la plata: `desde` queda con quien mandó.
+      avisoPrevio: avisoCubrePago(c, { desde: args.desde, blockAt: args.blockAt }),
+      desde: args.desde,
     });
     await acreditarEn(ctx, c._id, args.aporteCentavos);
     return null;
   },
 });
+
+// El aviso que cubre un pago: pendiente, de esa wallet, con email y dentro del
+// plazo. Si dos emails distintos avisaron la misma wallet, no se elige a
+// ninguno (no hay forma de saber quién mandó).
+async function avisoDe(
+  ctx: MutationCtx,
+  campaniaId: Id<"campaigns">,
+  pago: { desde?: string; blockAt?: number },
+): Promise<Doc<"contribuciones"> | null> {
+  if (!pago.desde) return null;
+  const candidatos = (
+    await ctx.db
+      .query("contribuciones")
+      .withIndex("by_desde_estado", (q) => q.eq("desde", pago.desde).eq("estado", "pendiente"))
+      .take(20)
+  ).filter(
+    (c) => c.via === "crypto" && c.campaniaId === campaniaId && c.email && avisoCubrePago(c, pago),
+  );
+  const emails = new Set(candidatos.map((c) => c.email));
+  return emails.size === 1 ? candidatos[0] : null;
+}
 
 // El scan crea la fila ya pendiente con el hash atado; acreditar hace el resto.
 export const crearObservadaCrypto = internalMutation({
@@ -653,6 +680,7 @@ export const crearObservadaCrypto = internalMutation({
     usdCents: v.number(),
     mepCentavosPorUsd: v.number(),
     blockAt: v.optional(v.number()),
+    desde: v.optional(v.string()),
     aporteCentavos: v.number(),
   },
   returns: v.union(v.null(), v.id("contribuciones")),
@@ -681,9 +709,23 @@ export const crearObservadaCrypto = internalMutation({
       usdCents: args.usdCents,
       mepCentavosPorUsd: args.mepCentavosPorUsd,
       blockAt: args.blockAt,
+      desde: args.desde,
       createdAt: ahora,
     });
     await evento(ctx, id, "observada", ahora, args.txHash);
+    // A2: si alguien avisó esta wallet antes de pagar, la plata lleva su email
+    // y su aviso queda como reclamo de esta fila. Sin pegar el hash.
+    const aviso = await avisoDe(ctx, campania._id, { desde: args.desde, blockAt: args.blockAt });
+    if (aviso) {
+      await ctx.db.patch(id, { email: aviso.email, avisoPrevio: true });
+      await ctx.db.patch(aviso._id, {
+        estado: "aprobada",
+        aporteCentavos: args.aporteCentavos,
+        acreditadaAt: ahora,
+        reclamoDe: id,
+      });
+      await evento(ctx, aviso._id, "aviso_vinculado", ahora, args.txHash);
+    }
     await acreditarEn(ctx, id, args.aporteCentavos);
     return id;
   },
@@ -743,6 +785,7 @@ export const escanearCrypto = internalAction({
                 usdCents: tx.usdCents,
                 mepCentavosPorUsd: mep,
                 blockAt: tx.blockAt,
+                desde: tx.from,
                 aporteCentavos: centavosPorUsd(tx.usdCents, mep),
               },
             );

@@ -23,6 +23,7 @@ const errores: Record<string, string> = {
   MP_FALLO: "No pudimos hablar con Mercado Pago. Probá de nuevo.",
   MP_NO_CONFIGURADO: "Mercado Pago no está disponible ahora.",
   CAMPANIA_NO_EXISTE: "La campaña no está disponible.",
+  WALLET_INVALIDA: "Esa wallet no parece válida (0x y 40 caracteres).",
   DEMASIADO_TRAFICO,
 };
 
@@ -286,8 +287,8 @@ function BloqueCrypto({
   const navigate = useNavigate();
   const [copiado, setCopiado] = useState(false);
   const [chain, setChain] = useState(crypto.chains[0] ?? "base");
-  const [txHash, setTxHash] = useState("");
   const [email, setEmail] = useState("");
+  const [desde, setDesde] = useState("");
   const [website, setWebsite] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
@@ -345,8 +346,8 @@ function BloqueCrypto({
         via: {
           rail: "crypto",
           chainId: chain,
-          ...(txHash.trim() ? { txHash: txHash.trim() } : {}),
           ...(email.trim() ? { email: email.trim() } : {}),
+          ...(desde.trim() ? { desde: desde.trim() } : {}),
         },
       });
       await navigate({ to: "/jujuy/aporte", search: { t: r.token } });
@@ -371,7 +372,7 @@ function BloqueCrypto({
         No hay devolución en cripto.
       </p>
       <p className="font-mono text-[11px] uppercase leading-relaxed tracking-[0.14em] text-azul/80">
-        Cafés: dejá tu email y tocá Avisar antes de mandar · Se cuenta en pesos al MEP del día.
+        Cafés: avisá antes de mandar con tu email y la wallet desde la que mandás · Se cuenta en pesos al MEP del día.
       </p>
       <div className="flex flex-wrap items-start gap-8">
         <div
@@ -413,38 +414,35 @@ function BloqueCrypto({
             </button>
           ))}
         </div>
-        <label
-          htmlFor="tx-hash"
-          className="font-mono text-[11px] uppercase tracking-[0.14em] text-azul/80"
-        >
-          ¿Ya mandaste? Tx hash (opcional)
-        </label>
-        <input
-          id="tx-hash"
-          value={txHash}
-          onChange={(e) => setTxHash(e.target.value)}
-          placeholder="0x…"
-          className="w-full border-0 border-b border-azul/40 bg-transparent py-2 font-mono text-sm text-azul placeholder:text-azul/40 focus:border-azul focus:outline-none"
-        />
-        <p className="-mt-2 font-mono text-[11px] uppercase tracking-[0.14em] text-azul/60">
-          Si no lo pegás, lo encontramos igual.
-        </p>
         <input
           type="email"
           autoComplete="email"
-          aria-label="Email (opcional)"
-          placeholder="Email (opcional)"
+          aria-label="Email"
+          placeholder="Email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           className="w-full border-0 border-b border-azul/40 bg-transparent py-2 font-mono text-sm text-azul placeholder:text-azul/40 focus:border-azul focus:outline-none"
         />
+        <input
+          aria-label="Tu wallet (desde dónde vas a mandar)"
+          placeholder="Tu wallet 0x… (desde dónde mandás)"
+          autoComplete="off"
+          spellCheck={false}
+          value={desde}
+          onChange={(e) => setDesde(e.target.value)}
+          className="w-full border-0 border-b border-azul/40 bg-transparent py-2 font-mono text-sm text-azul placeholder:text-azul/40 focus:border-azul focus:outline-none"
+        />
+        <p className="-mt-2 font-mono text-[11px] uppercase leading-relaxed tracking-[0.14em] text-azul/70">
+          Avisá y mandá dentro de 48 h desde esa wallet: los cafés llegan solos. Sin
+          aviso, el aporte suma igual pero sin cafés.
+        </p>
         <div>
           <button
             type="submit"
             disabled={enviando}
             className="border border-azul px-4 py-2 font-mono text-[11px] uppercase tracking-[0.14em] text-azul hover:bg-azul hover:text-nieve disabled:opacity-70"
           >
-            Avisar
+            Avisar antes de mandar
           </button>
         </div>
         {error && (

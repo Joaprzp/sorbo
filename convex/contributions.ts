@@ -4,7 +4,7 @@ import { internal } from "./_generated/api";
 import { estadoContribucion, viaContribucion } from "./schema";
 import { resolvePorts } from "./_lib/ports";
 import { CHAINS_SOPORTADAS, MIN_MP_CENTAVOS, MIN_USD_CENTS } from "./_lib/dominio";
-import { normalizarEmail } from "./_lib/recompensa";
+import { esWallet, normalizarEmail } from "./_lib/recompensa";
 import { frenar } from "./limites";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -30,6 +30,7 @@ export const contribuir = action({
         chainId: v.string(),
         txHash: v.optional(v.string()),
         email: v.optional(v.string()),
+        desde: v.optional(v.string()),
       }),
     ),
   },
@@ -110,11 +111,13 @@ export const contribuir = action({
       const email = args.via.email === undefined ? undefined : normalizarEmail(args.via.email);
       if (!CHAINS_SOPORTADAS.includes(chainId)) throw new Error("RED_NO_SOPORTADA");
       if (email !== undefined && !EMAIL_RE.test(email)) throw new Error("EMAIL_INVALIDO");
+      const desde = args.via.desde?.trim().toLowerCase() || undefined;
+      if (desde !== undefined && !esWallet(desde)) throw new Error("WALLET_INVALIDA");
       // Antes de crear la fila: una acción no revierte lo que ya escribió.
       await frenar(ctx, txHash ? "verificarTx" : "contribuirCripto");
       const { id, token } = await ctx.runMutation(
         internal.contributionsInternal.crearPendienteCrypto,
-        { slug: args.slug, chainId, email },
+        { slug: args.slug, chainId, email, desde },
       );
       if (txHash) {
         await ctx.runAction(internal.contributionsInternal.reclamarTx, { id, txHash });
