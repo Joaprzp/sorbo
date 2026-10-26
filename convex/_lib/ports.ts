@@ -1,7 +1,7 @@
 // Puertos para dependencias externas (cat. 4 — true external).
 // Producción: adapters HTTP. Tests: fakes in-memory vía setPortsForTesting.
 // Si una env falta, el puerto es null → el rail se oculta en `progreso`.
-import { MpOrdersHttp, EvmIndexerHttp, FxHttp, ResendHttp, BrrrHttp } from "./adapters";
+import { MpOrdersHttp, EvmIndexerHttp, FxHttp, ResendHttp, BrrrHttp, TurnstileHttp } from "./adapters";
 
 export interface MpOrderRequest {
   externalReference: string;
@@ -92,12 +92,25 @@ export interface PushPort {
   push(aviso: PushAviso): Promise<void>;
 }
 
+// Cloudflare Turnstile: la respuesta de siteverify, tal cual la da Cloudflare.
+export type TurnstileResultado = {
+  success: boolean;
+  action?: string;
+  hostname?: string;
+  metadata?: { result_with_testing_key?: boolean };
+};
+
+export interface TurnstilePort {
+  siteverify(token: string): Promise<TurnstileResultado>;
+}
+
 export interface Ports {
   mp: MpPort | null;
   evm: EvmPort | null;
   fx: FxPort | null;
   mail: MailPort | null;
   push: PushPort | null;
+  turnstile: TurnstilePort | null;
 }
 
 let overrides: Ports | null = null;
@@ -112,6 +125,7 @@ export function resolvePorts(): Ports {
   const indexerKey = process.env.INDEXER_API_KEY;
   const resendKey = process.env.RESEND_API_KEY;
   const brrrKey = process.env.BRRR_KEY;
+  const turnstileSecret = process.env.TURNSTILE_SECRET;
   return {
     mp: mpToken ? new MpOrdersHttp(mpToken) : null,
     evm: indexerKey ? new EvmIndexerHttp(indexerKey) : null,
@@ -119,5 +133,6 @@ export function resolvePorts(): Ports {
     fx: indexerKey ? new FxHttp() : null,
     mail: resendKey ? new ResendHttp(resendKey) : null,
     push: brrrKey ? new BrrrHttp(brrrKey) : null,
+    turnstile: turnstileSecret ? new TurnstileHttp(turnstileSecret) : null,
   };
 }

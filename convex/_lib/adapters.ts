@@ -13,6 +13,8 @@ import type {
   MailKind,
   PushPort,
   PushAviso,
+  TurnstilePort,
+  TurnstileResultado,
 } from "./ports";
 import { ANTIGUEDAD_MAX_BLOQUES, TOKEN_CONTRACTS } from "./dominio";
 import { MAIL_SUBJECTS, mailHtml, mailText } from "./mailPlantillas";
@@ -319,5 +321,21 @@ export class BrrrHttp implements PushPort {
       }),
     });
     if (!res.ok) throw new Error(`brrr ${res.status}`);
+  }
+}
+
+// Siteverify de Turnstile. Sin IP del visitante: Convex no la expone.
+export class TurnstileHttp implements TurnstilePort {
+  constructor(private secret: string) {}
+
+  async siteverify(token: string): Promise<TurnstileResultado> {
+    const res = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      signal: AbortSignal.timeout(10_000),
+      body: new URLSearchParams({ secret: this.secret, response: token }),
+    });
+    if (!res.ok) throw new Error(`siteverify ${res.status}`);
+    return (await res.json()) as TurnstileResultado;
   }
 }

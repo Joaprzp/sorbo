@@ -6,6 +6,7 @@ import { resolvePorts } from "./_lib/ports";
 import { CHAINS_SOPORTADAS, MIN_MP_CENTAVOS, MIN_USD_CENTS } from "./_lib/dominio";
 import { esWallet, normalizarEmail } from "./_lib/recompensa";
 import { frenar } from "./limites";
+import { exigirHumano } from "./humano";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const SITE_URL = process.env.SITE_URL ?? "https://sorbolabs.com";
@@ -19,6 +20,7 @@ export const contribuir = action({
   args: {
     slug: v.string(),
     website: v.optional(v.string()),
+    turnstile: v.string(),
     via: v.union(
       v.object({
         rail: v.literal("mp"),
@@ -51,6 +53,7 @@ export const contribuir = action({
     if (args.website) {
       return { token: "ok", intent: { kind: "noop" as const } };
     }
+    await exigirHumano(args.turnstile, args.via.rail === "mp" ? "contribuir_mp" : "aviso_cripto");
     const ports = resolvePorts();
     if (args.via.rail === "mp") {
       if (!ports.mp) throw new Error("MP_NO_CONFIGURADO");

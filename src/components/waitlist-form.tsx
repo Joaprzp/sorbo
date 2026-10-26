@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useMutation } from "convex/react";
+import { useAction } from "convex/react";
 import { z } from "zod";
 import { api } from "../../convex/_generated/api";
-import { DEMASIADO_TRAFICO } from "../lib/errores";
+import { DEMASIADO_TRAFICO, VERIFICACION_FALLIDA, VERIFICACION_NO_DISPONIBLE } from "../lib/errores";
+import { useTurnstile } from "./turnstile";
 
 const schema = z.object({
   email: z.email("Ese email no parece válido"),
@@ -14,7 +15,8 @@ const schema = z.object({
 type Values = z.infer<typeof schema>;
 
 export function WaitlistForm() {
-  const join = useMutation(api.waitlist.join);
+  const join = useAction(api.waitlist.join);
+  const { ref: humanoRef, obtener: tokenHumano, usado: tokenUsado } = useTurnstile("lista_espera");
   const [sent, setSent] = useState(false);
   const {
     register,
@@ -33,14 +35,23 @@ export function WaitlistForm() {
 
   const onSubmit = handleSubmit(async (values) => {
     try {
-      await join({ email: values.email, website: values.website });
+      await join({
+        email: values.email,
+        website: values.website,
+        turnstile: await tokenHumano(),
+      });
       setSent(true);
     } catch (e) {
+      tokenUsado();
       const msg = e instanceof Error ? e.message : "";
       setError("email", {
         message: msg.includes("DEMASIADO_TRAFICO")
           ? DEMASIADO_TRAFICO
-          : "No pudimos anotarte. Probá de nuevo.",
+          : msg.includes("VERIFICACION_NO_DISPONIBLE")
+            ? VERIFICACION_NO_DISPONIBLE
+            : msg.includes("VERIFICACION_FALLIDA")
+              ? VERIFICACION_FALLIDA
+              : "No pudimos anotarte. Probá de nuevo.",
       });
     }
   });
@@ -80,6 +91,7 @@ export function WaitlistForm() {
         className="hidden"
         {...register("website")}
       />
+      <div ref={humanoRef} />
 
       <button
         type="submit"

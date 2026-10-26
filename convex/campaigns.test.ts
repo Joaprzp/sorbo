@@ -3,7 +3,7 @@ import { convexTest } from "convex-test";
 import rateLimiter from "@convex-dev/rate-limiter/test";
 import schema from "./schema";
 import { api, internal } from "./_generated/api";
-import { setPortsForTesting, type MpPort, type EvmPort, type FxPort, type MailData, type MailPort, type PushPort, type Ports } from "./_lib/ports";
+import { setPortsForTesting, type MpPort, type EvmPort, type FxPort, type MailData, type MailPort, type PushPort, type Ports, type TurnstilePort } from "./_lib/ports";
 import { CHAINS_SOPORTADAS } from "./_lib/dominio";
 import { esContratoSoportado } from "./_lib/evmChecks";
 
@@ -89,8 +89,17 @@ export const pushMemoria: PushPort & { enviados: { title: string; message: strin
   },
 };
 
+// En los tests el token es el nombre de la acción: el fake lo devuelve como
+// `action`, así se prueba el cruce acción↔formulario.
+const turnstileFake: TurnstilePort = {
+  async siteverify(token) {
+    return { success: token !== "bot", action: token, hostname: "sorbolabs.com" };
+  },
+};
+process.env.TURNSTILE_HOSTNAMES = "sorbolabs.com";
+
 export function puertos(mp: MpPort | null, evm?: EvmPort): Ports {
-  return { mp, evm: evm ?? evmVacio, fx: fxFija, mail: mailMemoria, push: pushMemoria };
+  return { mp, evm: evm ?? evmVacio, fx: fxFija, mail: mailMemoria, push: pushMemoria, turnstile: turnstileFake };
 }
 
 async function campania(t: ReturnType<typeof convexTest>, slug = "jujuy") {
@@ -115,7 +124,7 @@ test("contribuir mp: crea contribución pendiente y devuelve redirect a MP", asy
   const mp = new MpFake();
   setPortsForTesting(puertos(mp));
 
-  const r = await t.action(api.contributions.contribuir, {
+  const r = await t.action(api.contributions.contribuir, { turnstile: "contribuir_mp",
     slug: "jujuy",
     via: { rail: "mp", montoCentavos: 500_000, email: "ana@ejemplo.com" },
   });
@@ -129,13 +138,45 @@ test("contribuir mp: crea contribución pendiente y devuelve redirect a MP", asy
   expect(mp.orders.get("ORD-1")!.externalReference).toBe(r.token);
 });
 
+test("turnstile: sin token válido, de la acción correcta, no se crea nada", async () => {
+  const t = nuevoTest();
+  await campania(t);
+  const mp = new MpFake();
+  setPortsForTesting(puertos(mp));
+  const via = { rail: "mp" as const, montoCentavos: 500_000 };
+  for (const turnstile of ["bot", "aviso_cripto", ""]) {
+    await expect(t.action(api.contributions.contribuir, { turnstile, slug: "jujuy", via })).rejects.toThrow(
+      "VERIFICACION_FALLIDA",
+    );
+  }
+  await expect(t.action(api.waitlist.join, { turnstile: "contribuir_mp", email: "a@x.com" })).rejects.toThrow(
+    "VERIFICACION_FALLIDA",
+  );
+  expect(mp.orders.size).toBe(0);
+  const filas = await t.run((ctx) => ctx.db.query("contribuciones").collect());
+  expect(filas).toHaveLength(0);
+});
+
+test("turnstile: sin configuración, falla cerrado", async () => {
+  const t = nuevoTest();
+  await campania(t);
+  setPortsForTesting({ ...puertos(new MpFake()), turnstile: null });
+  await expect(
+    t.action(api.contributions.contribuir, {
+      turnstile: "contribuir_mp",
+      slug: "jujuy",
+      via: { rail: "mp", montoCentavos: 500_000 },
+    }),
+  ).rejects.toThrow("VERIFICACION_NO_DISPONIBLE");
+});
+
 test("contribuir mp: rechaza monto bajo el mínimo", async () => {
   const t = nuevoTest();
   await campania(t);
   setPortsForTesting(puertos(new MpFake()));
 
   await expect(
-    t.action(api.contributions.contribuir, {
+    t.action(api.contributions.contribuir, { turnstile: "contribuir_mp",
       slug: "jujuy",
       via: { rail: "mp", montoCentavos: 100_00 },
     }),
@@ -187,7 +228,7 @@ test("pago verificado por webhook acredita y suma al progreso", async () => {
   const mp = new MpFake();
   setPortsForTesting(puertos(mp));
 
-  const r = await t.action(api.contributions.contribuir, {
+  const r = await t.action(api.contributions.contribuir, { turnstile: "contribuir_mp",
     slug: "jujuy",
     via: { rail: "mp", montoCentavos: 500_000, email: "ana@ejemplo.com" },
   });
@@ -211,7 +252,7 @@ test("webhook duplicado no duplica la acreditación", async () => {
   const mp = new MpFake();
   setPortsForTesting(puertos(mp));
 
-  await t.action(api.contributions.contribuir, {
+  await t.action(api.contributions.contribuir, { turnstile: "contribuir_mp",
     slug: "jujuy",
     via: { rail: "mp", montoCentavos: 500_000 },
   });
@@ -231,7 +272,7 @@ test("webhook con firma inválida no agenda nada", async () => {
   await campania(t);
   const mp = new MpFake();
   setPortsForTesting(puertos(mp));
-  await t.action(api.contributions.contribuir, {
+  await t.action(api.contributions.contribuir, { turnstile: "contribuir_mp",
     slug: "jujuy",
     via: { rail: "mp", montoCentavos: 500_000 },
   });
@@ -253,7 +294,7 @@ test("reconciliar al volver acredita sin esperar al webhook", async () => {
   const mp = new MpFake();
   setPortsForTesting(puertos(mp));
 
-  const r = await t.action(api.contributions.contribuir, {
+  const r = await t.action(api.contributions.contribuir, { turnstile: "contribuir_mp",
     slug: "jujuy",
     via: { rail: "mp", montoCentavos: 500_000 },
   });
@@ -282,7 +323,7 @@ test("sweep expira una orden que MP dio por vencida", async () => {
   await campania(t);
   const mp = new MpFake();
   setPortsForTesting(puertos(mp));
-  const r = await t.action(api.contributions.contribuir, {
+  const r = await t.action(api.contributions.contribuir, { turnstile: "contribuir_mp",
     slug: "jujuy",
     via: { rail: "mp", montoCentavos: 500_000 },
   });
@@ -301,7 +342,7 @@ test("sweep no expira un pago en proceso (ticket en camino)", async () => {
   await campania(t);
   const mp = new MpFake();
   setPortsForTesting(puertos(mp));
-  const r = await t.action(api.contributions.contribuir, {
+  const r = await t.action(api.contributions.contribuir, { turnstile: "contribuir_mp",
     slug: "jujuy",
     via: { rail: "mp", montoCentavos: 500_000 },
   });
@@ -320,7 +361,7 @@ test("sweep cancela en MP una orden aún creada", async () => {
   await campania(t);
   const mp = new MpFake();
   setPortsForTesting(puertos(mp));
-  const r = await t.action(api.contributions.contribuir, {
+  const r = await t.action(api.contributions.contribuir, { turnstile: "contribuir_mp",
     slug: "jujuy",
     via: { rail: "mp", montoCentavos: 500_000 },
   });
@@ -339,7 +380,7 @@ test("pago tardío verificado sobre fila expirada igual acredita", async () => {
   await campania(t);
   const mp = new MpFake();
   setPortsForTesting(puertos(mp));
-  const r = await t.action(api.contributions.contribuir, {
+  const r = await t.action(api.contributions.contribuir, { turnstile: "contribuir_mp",
     slug: "jujuy",
     via: { rail: "mp", montoCentavos: 500_000 },
   });
@@ -369,7 +410,7 @@ async function acreditar(
 ) {
   const mp = opts?.mp ?? new MpFake();
   setPortsForTesting(puertos(mp));
-  const r = await t.action(api.contributions.contribuir, {
+  const r = await t.action(api.contributions.contribuir, { turnstile: "contribuir_mp",
     slug: "jujuy",
     via: { rail: "mp", montoCentavos, email: opts?.email },
   });
@@ -479,7 +520,7 @@ test("contribuir crypto devuelve el intent de depósito", async () => {
   const evm = new EvmFake();
   setPortsForTesting(puertos(null, evm));
 
-  const r = await t.action(api.contributions.contribuir, {
+  const r = await t.action(api.contributions.contribuir, { turnstile: "aviso_cripto",
     slug: "jujuy",
     via: { rail: "crypto", chainId: "base" },
   });
@@ -598,7 +639,7 @@ test("claim por hash rechaza un depósito anterior a la campaña", async () => {
   );
   setPortsForTesting(puertos(null, evm));
 
-  const r = await t.action(api.contributions.contribuir, {
+  const r = await t.action(api.contributions.contribuir, { turnstile: "aviso_cripto",
     slug: "jujuy",
     via: { rail: "crypto", chainId: "bsc" },
   });
@@ -689,7 +730,7 @@ test("contribuyente que pega su txHash acredita al instante", async () => {
   evm.transfers.push(txBase());
   setPortsForTesting(puertos(null, evm));
 
-  const r = await t.action(api.contributions.contribuir, {
+  const r = await t.action(api.contributions.contribuir, { turnstile: "aviso_cripto",
     slug: "jujuy",
     via: { rail: "crypto", chainId: "base" },
   });
@@ -706,7 +747,7 @@ test("txHash inexistente no acredita ni rompe", async () => {
   await campania(t);
   setPortsForTesting(puertos(null, new EvmFake()));
 
-  const r = await t.action(api.contributions.contribuir, {
+  const r = await t.action(api.contributions.contribuir, { turnstile: "aviso_cripto",
     slug: "jujuy",
     via: { rail: "crypto", chainId: "base" },
   });
@@ -725,7 +766,7 @@ test("acreditar con email dispara notificación de acreditación", async () => {
   setPortsForTesting(puertos(mp));
   mailMemoria.enviados.length = 0;
 
-  const r = await t.action(api.contributions.contribuir, {
+  const r = await t.action(api.contributions.contribuir, { turnstile: "contribuir_mp",
     slug: "jujuy",
     via: { rail: "mp", montoCentavos: 500_000, email: "ana@ejemplo.com" },
   });
@@ -820,7 +861,7 @@ test("hash ya acreditado por scan deja el intent en aprobada, sin duplicar", asy
   await t.action(internal.contributionsInternal.escanearCrypto, {});
   await drenar(t);
 
-  const r = await t.action(api.contributions.contribuir, {
+  const r = await t.action(api.contributions.contribuir, { turnstile: "aviso_cripto",
     slug: "jujuy",
     via: { rail: "crypto", chainId: "base" },
   });
@@ -844,7 +885,7 @@ test("txHash en otra red soportada acredita igual", async () => {
   );
   setPortsForTesting(puertos(null, evm));
 
-  const r = await t.action(api.contributions.contribuir, {
+  const r = await t.action(api.contributions.contribuir, { turnstile: "aviso_cripto",
     slug: "jujuy",
     via: { rail: "crypto", chainId: "base" },
   });
@@ -953,7 +994,7 @@ test("recompensa: cripto cuenta en pesos a MEP del día", async () => {
   const evm = new EvmFake();
   evm.transfers.push(txBase({ txHash: "0xcafe", usdCents: 5000 })); // 50 USDC
   setPortsForTesting(puertos(null, evm));
-  await t.action(api.contributions.contribuir, {
+  await t.action(api.contributions.contribuir, { turnstile: "aviso_cripto",
     slug: "jujuy",
     via: { rail: "crypto", chainId: "base", txHash: "0xcafe", email: "d@d.com", desde: DONANTE },
   });
@@ -1144,7 +1185,7 @@ test("recompensa: dos reclamos de la misma transfer no duplican cafés", async (
   await t.action(internal.contributionsInternal.escanearCrypto, {}); // el scan llega primero
   await drenar(t);
   for (const email of ["p@p.com", "p@p.com", "q@q.com"]) {
-    await t.action(api.contributions.contribuir, {
+    await t.action(api.contributions.contribuir, { turnstile: "aviso_cripto",
       slug: "jujuy",
       via: { rail: "crypto", chainId: "base", txHash: "0xdoble", email, desde: DONANTE },
     });
@@ -1257,7 +1298,7 @@ test("recompensa: un aviso cripto posterior al pago no da cafés", async () => {
   await t.action(internal.contributionsInternal.escanearCrypto, {});
   await drenar(t);
   // Alguien ve la transfer on-chain y la reclama con su email: llega tarde.
-  await t.action(api.contributions.contribuir, {
+  await t.action(api.contributions.contribuir, { turnstile: "aviso_cripto",
     slug: "jujuy",
     via: { rail: "crypto", chainId: "base", txHash: "0xajena", email: "vivo@x.com" },
   });
@@ -1270,8 +1311,9 @@ test("recompensa: un aviso cripto posterior al pago no da cafés", async () => {
 
 test("límites: pasado el tope global, la lista de espera frena", async () => {
   const t = nuevoTest();
-  for (let i = 0; i < 20; i++) await t.mutation(api.waitlist.join, { email: `w${i}@x.com` });
-  await expect(t.mutation(api.waitlist.join, { email: "w99@x.com" })).rejects.toThrow("DEMASIADO_TRAFICO");
+  setPortsForTesting(puertos(null));
+  for (let i = 0; i < 20; i++) await t.action(api.waitlist.join, { turnstile: "lista_espera", email: `w${i}@x.com` });
+  await expect(t.action(api.waitlist.join, { turnstile: "lista_espera", email: "w99@x.com" })).rejects.toThrow("DEMASIADO_TRAFICO");
 });
 
 test("staff: con PIN de 5, 5 fallidos en el día traban los ingresos nuevos hasta desbloquear", async () => {
@@ -1339,7 +1381,7 @@ test("cripto: una fila observada que quedó pendiente por un crash se acredita e
 // --- A2: el aviso declara la wallet de origen ---
 
 async function avisar(t: ReturnType<typeof nuevoTest>, email: string, desde: string) {
-  await t.action(api.contributions.contribuir, {
+  await t.action(api.contributions.contribuir, { turnstile: "aviso_cripto",
     slug: "jujuy",
     via: { rail: "crypto", chainId: "base", email, desde },
   });
