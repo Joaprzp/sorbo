@@ -62,7 +62,7 @@ El mecanismo de registro previo a la apertura del local. Quien se anota recibe a
 La recaudación abierta para financiar una sucursal nueva. La primera y única definida hoy es la de Jujuy; cada ciudad futura tendría su propia campaña y su propia pieza. No tiene fecha de cierre: queda abierta hasta llegar a la meta.
 
 **Contribución**:
-Un aporte de dinero real a la campaña. Puede ser anónima o llevar el email del contribuyente; nunca lleva recompensa a cambio. Pasa por estados según el cobro: pendiente (promesa o pago diferido), expirada (el intento de cobro murió sin dinero — un pago tardío verificado igual acredita), aprobada (dinero acreditado — la única que suma a la meta) y devuelta. Dos caminos de cobro: Mercado Pago (dinero en cuenta en pesos) y cripto (USDC/USDT en Base, Polygon, Ethereum, Optimism, BNB Chain, Celo y Monad — una sola address EVM — contado a cotización MEP del momento de la acreditación). Mínimo equivalente a un latte: 5.000 ARS o 5 USDC; lo que llega por debajo o por una red no soportada no cuenta.
+Un aporte de dinero real a la campaña. Puede ser anónima o llevar el email del contribuyente; con email, vuelve en café (ver **Recompensa**). Pasa por estados según el cobro: pendiente (promesa o pago diferido), expirada (el intento de cobro murió sin dinero — un pago tardío verificado igual acredita), aprobada (dinero acreditado — la única que suma a la meta) y devuelta. Dos caminos de cobro: Mercado Pago (dinero en cuenta en pesos) y cripto (USDC/USDT en Base, Polygon, Ethereum, Optimism, BNB Chain, Celo y Monad — una sola address EVM — contado a cotización MEP del momento de la acreditación). Mínimo equivalente a un latte: 5.000 ARS o 5 USDC; lo que llega por debajo o por una red no soportada no cuenta.
 
 **Devolución automática**:
 La promesa de la campaña: si una contribución aprobada cumple 89 días y la meta todavía no se completó, ese dinero vuelve solo. Cada contribución corre su propio reloj desde la acreditación; lo devuelto se descuenta del recaudado. Una vez cumplida la meta, no hay más devoluciones. Excepción declarada: las contribuciones en cripto no tienen devolución — la pieza lo dice antes del QR.
@@ -74,7 +74,23 @@ El objetivo bruto en pesos de la campaña, elegido ya descontando el costo del c
 El desglose público de la meta por rubro (local, obra, salón, equipamiento, habilitaciones, apertura, tres meses de operación, imprevistos y costo del cobro). Vive en su propia pieza, `/jujuy/numeros`, y suma exactamente la meta.
 
 **Contribuyente**:
-Quien hace una contribución. Anónimo por defecto; si deja su email recibe novedades de la campaña — acreditación, devolución, meta cumplida. Distinto de la lista de espera: son intenciones distintas y no se mezclan.
+Quien hace una contribución. Anónimo por defecto; si deja su email recibe novedades de la campaña — acreditación, devolución, meta cumplida, apertura — y su recompensa. Distinto de la lista de espera: son intenciones distintas y no se mezclan.
+
+**Recompensa**:
+Los cafés que devuelve un aporte con email (ADR-0008): $5.000 da 1 café y cada $10.000 más suma 1, con tope de 10 por persona. Se calcula por email sobre la suma de sus aportes aprobados, así que una devolución la baja sola. Todos los cafés de la carta, durante los 6 meses siguientes a la **Apertura**. Nada más: sin eventos ni nombres en la pared.
+_Avoid_: tier, premio, beneficio.
+
+**Saldo**:
+Los cafés que le quedan a una persona: los que da su recompensa menos sus canjes. No se guarda; se calcula. Estados: reservado (meta sin cumplir), confirmado (meta cumplida, sin apertura), activo, vencido y anulado (sus aportes se devolvieron).
+
+**Código**:
+El derecho al saldo, al portador y transferible: `JUJ-` y seis caracteres sin ambiguos, más un QR que lleva a `/canje/<id>`. Una persona, un código, aunque aporte varias veces. El código corto solo se busca desde la sesión del staff.
+
+**Canje**:
+Cada vez que el staff descuenta cafés de un saldo desde `/canje/<id>`, con la sesión de PIN del dispositivo (`/staff`). De 1 al saldo por vez, con deshacer por 5 minutos. Solo después de la apertura.
+
+**Apertura**:
+La fecha en que abre Sorbo Jujuy; se fija a mano (`fijarApertura`) y solo con la meta cumplida. Habilita el canje y fija el vencimiento: apertura + 6 meses.
 
 ### Voz
 
