@@ -154,7 +154,7 @@ export function Numeros() {
 
       <Foto
         src="/jujuy/barra.webp"
-        alt="Concepto de la barra: isla de acero con bacha y, detrás, la barra de trabajo con hornito, máquina y molino contra el muro del fondo. Sin banquetas."
+        alt="Concepto de la barra: isla de acero y, detrás, la barra de trabajo con hornito, bacha, máquina y molino contra el muro del fondo. Sin banquetas."
         pie={`${rubro("04").titulo} · ${pesos(totalRubro(rubro("04")))}`}
       />
 
