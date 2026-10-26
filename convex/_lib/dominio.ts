@@ -26,7 +26,8 @@ export const ANTIGUEDAD_MAX_BLOQUES: Record<string, number> = {
 // scam-token con decimales inflados, no plata real.
 export const TECHO_AVISO_USD_CENTS = 50_000_000;
 export const MIN_MP_CENTAVOS = 500_000; // $5.000 ARS
-export const SUGERIDOS_CENTAVOS = [500_000, 1_000_000, 2_500_000];
+// 1, 2, 5 y 10 cafés (ADR-0008): $10.000 daba lo mismo que $5.000.
+export const SUGERIDOS_CENTAVOS = [500_000, 1_500_000, 4_500_000, 9_500_000];
 
 // Contratos oficiales por red — un símbolo "USDC" trucho no cuenta.
 // Ojo: los BEP-20 usan 18 decimales, no 6.

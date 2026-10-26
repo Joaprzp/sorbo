@@ -19,6 +19,8 @@ export const SUPUESTOS = [
   { label: "Alquiler", valor: "$1.500.000 / mes" },
   { label: "Equipo", valor: "Tres personas · CCT 389/04" },
   { label: "Dólar MEP", valor: `$${MEP_PESOS.toLocaleString("es-AR")} · Octubre 2026` },
+  // ADR-0008: los cafés de recompensa no salen de la meta.
+  { label: "Recompensa en café", valor: "Se paga con la operación" },
 ];
 
 export const RUBROS: Rubro[] = [

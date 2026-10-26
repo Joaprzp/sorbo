@@ -6,6 +6,7 @@ import { encodeQR } from "qr";
 import { api } from "../../convex/_generated/api";
 import { Pieza } from "./pieza";
 import { ars } from "../lib/format";
+import { cafesPorTotal } from "../../convex/_lib/recompensa";
 
 const errores: Record<string, string> = {
   MONTO_MINIMO: "El mínimo es $5.000.",
@@ -113,13 +114,6 @@ function EsqueletoProgreso() {
         </div>
         <div className="h-9 border border-azul/40" />
       </div>
-      <hr className="my-12 border-0 border-t border-azul/40" />
-      <div className="flex flex-wrap gap-2">
-        <Fantasma className="h-9 w-24" />
-        <Fantasma className="h-9 w-24" />
-        <Fantasma className="h-9 w-24" />
-        <Fantasma className="h-9 w-36" />
-      </div>
       <span className="sr-only">Cargando</span>
     </div>
   );
@@ -154,12 +148,14 @@ function FormMp({ sugeridos, min }: { sugeridos: number[]; min: number }) {
   const [error, setError] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
 
+  const crudo = libre.replace(/[^\d,]/g, "").replace(",", ".");
+  const pesos = libre.trim() ? Number(crudo) : monto / 100;
+  const centavos = Math.round(pesos * 100);
+  const cafesDelMonto = Number.isFinite(pesos) ? cafesPorTotal(centavos) : 0;
+
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (website) return;
-    const crudo = libre.replace(/[^\d,]/g, "").replace(",", ".");
-    const pesos = libre.trim() ? Number(crudo) : monto / 100;
-    const centavos = Math.round(pesos * 100);
     if (!Number.isFinite(pesos) || centavos < min) {
       setError(`El mínimo es ${ars(min)}.`);
       return;
@@ -176,7 +172,7 @@ function FormMp({ sugeridos, min }: { sugeridos: number[]; min: number }) {
           ...(email.trim() ? { email: email.trim() } : {}),
         },
       });
-      if (r.intent.kind === "redirect") window.location.href = r.intent.url;
+      if (r.intent.kind === "redirect") window.location.assign(r.intent.url);
     } catch (err) {
       setError(mensajeError(err));
       setEnviando(false);
@@ -216,6 +212,13 @@ function FormMp({ sugeridos, min }: { sugeridos: number[]; min: number }) {
             className="w-36 border border-azul/40 bg-transparent px-4 py-2 font-mono text-xs uppercase tracking-[0.14em] text-azul placeholder:text-azul/40 focus:border-azul focus:outline-none"
           />
         </div>
+        {cafesDelMonto > 0 && (
+          <p aria-live="polite" className="mt-4 font-mono text-[11px] uppercase tracking-[0.14em] text-azul">
+            {email.trim()
+              ? `${ars(centavos)} · ${cafes(cafesDelMonto)}`
+              : `Dejá tu email para recibir ${cafes(cafesDelMonto)}`}
+          </p>
+        )}
       </fieldset>
 
       <div className="max-w-md">
@@ -223,7 +226,7 @@ function FormMp({ sugeridos, min }: { sugeridos: number[]; min: number }) {
           htmlFor="email-aporte"
           className="block font-mono text-xs uppercase tracking-[0.16em] text-azul/80"
         >
-          Email (opcional)
+          Email · con email, tu aporte vuelve en café
         </label>
         <input
           id="email-aporte"
@@ -235,8 +238,8 @@ function FormMp({ sugeridos, min }: { sugeridos: number[]; min: number }) {
           className="mt-2 w-full border-0 border-b border-azul/40 bg-transparent py-2 font-mono text-sm text-azul placeholder:text-azul/40 focus:border-azul focus:outline-none"
         />
         <p className="mt-2 font-mono text-[11px] uppercase tracking-[0.14em] text-azul/70">
-          Te avisamos cuando acredita, si vuelve y si se cumple la meta. Nada
-          de spam.
+          Te mandamos tu código, te avisamos si vuelve y si se cumple la meta.
+          Nada de spam.
         </p>
       </div>
 
@@ -359,6 +362,9 @@ function BloqueCrypto({
       <p className="font-mono text-[11px] uppercase leading-relaxed tracking-[0.14em] text-alerta">
         No hay devolución en cripto.
       </p>
+      <p className="font-mono text-[11px] uppercase leading-relaxed tracking-[0.14em] text-azul/80">
+        Se cuenta en pesos al MEP del día · Con email, misma regla de cafés.
+      </p>
       <div className="flex flex-wrap items-start gap-8">
         <div
           className="w-32 shrink-0 border border-azul/40 bg-nieve p-2 [&_svg]:block [&_svg]:size-full [&_svg_path]:fill-azul"
@@ -446,6 +452,52 @@ function BloqueCrypto({
   );
 }
 
+const cafes = (n: number) => (n === 1 ? "1 café" : `${n} cafés`);
+
+// ADR-0008: lo primero que se ve antes de aportar. Segundo y último tamaño de
+// titular de la pieza.
+function Recompensa() {
+  const fila =
+    "flex items-baseline justify-between gap-6 py-3 font-mono text-[11px] uppercase tracking-[0.16em] text-azul/80 sm:text-xs";
+  return (
+    <section className="mt-16">
+      <h2 className="text-[clamp(1.75rem,5vw,3.5rem)] font-bold uppercase leading-[0.98]">
+        Tu aporte
+        <br />
+        vuelve en café.
+      </h2>
+      <dl className="mt-8 border-t border-azul/40">
+        <div className={fila}>
+          <dt>{ars(500_000)}</dt>
+          <dd className="text-azul">1 café</dd>
+        </div>
+        <div className={fila}>
+          <dt>Cada {ars(1_000_000)} más</dt>
+          <dd className="text-azul">+1 café</dd>
+        </div>
+        <div className={fila}>
+          <dt>Tope</dt>
+          <dd className="text-azul">10 cafés</dd>
+        </div>
+      </dl>
+      <p className="mt-4 font-mono text-[11px] uppercase leading-relaxed tracking-[0.14em] text-azul/70">
+        Todos los cafés de la carta · 6 meses desde la apertura · Con email.
+      </p>
+    </section>
+  );
+}
+
+function EsqueletoForm() {
+  return (
+    <div aria-hidden="true" className="flex flex-wrap gap-2">
+      <Fantasma className="h-9 w-24" />
+      <Fantasma className="h-9 w-24" />
+      <Fantasma className="h-9 w-24" />
+      <Fantasma className="h-9 w-36" />
+    </div>
+  );
+}
+
 export function Jujuy() {
   const p = useQuery(api.campaigns.progreso, { slug: "jujuy" });
   return (
@@ -471,25 +523,32 @@ export function Jujuy() {
         </Link>
       </section>
 
-      {p === undefined ? (
-        <EsqueletoProgreso />
-      ) : (
-        <>
-          <Progreso p={p} />
-          <section className="mt-10">
-            {p?.rails.mp && (
-              <FormMp
-                sugeridos={p.sugeridosCentavos}
-                min={p.minMpCentavos}
-              />
-            )}
-            {p?.rails.mp && p?.rails.crypto && (
-              <hr className="my-12 border-0 border-t border-azul/40" />
-            )}
-            {p?.rails.crypto && <BloqueCrypto crypto={p.rails.crypto} />}
-          </section>
-        </>
-      )}
+      {p === undefined ? <EsqueletoProgreso /> : <Progreso p={p} />}
+
+      <Recompensa />
+
+      {/* Banda Bruma: cómo aportás, separado de qué recibís. */}
+      <section className="mt-12 bg-bruma px-6 py-10 sm:px-10">
+        <p className="font-mono text-xs uppercase tracking-[0.16em] text-azul/80">Contribuir</p>
+        <div className="mt-6">
+          {p === undefined ? (
+            <EsqueletoForm />
+          ) : (
+            <>
+              {p?.rails.mp && (
+                <FormMp
+                  sugeridos={p.sugeridosCentavos}
+                  min={p.minMpCentavos}
+                />
+              )}
+              {p?.rails.mp && p?.rails.crypto && (
+                <hr className="my-12 border-0 border-t border-azul/40" />
+              )}
+              {p?.rails.crypto && <BloqueCrypto crypto={p.rails.crypto} />}
+            </>
+          )}
+        </div>
+      </section>
     </Pieza>
   );
 }
