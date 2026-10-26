@@ -172,7 +172,11 @@ export const anunciarMetaCumplida = internalAction({
         { campaniaId },
       );
       for (const to of emails) {
-        await ports.mail.send("meta_cumplida", to, {});
+        const recompensa = await ctx.runQuery(internal.recompensas.paraMail, {
+          campaniaId,
+          email: to,
+        });
+        await ports.mail.send("meta_cumplida", to, recompensa ? { recompensa } : {});
       }
     }
     if (metaCentavos !== undefined) {
@@ -752,8 +756,13 @@ export const enviarNotificacion = internalAction({
       id: args.contribucionId,
     });
     if (!c?.email) return;
+    const recompensa = await ctx.runQuery(internal.recompensas.paraMail, {
+      campaniaId: c.campaniaId,
+      email: c.email,
+    });
     await ports.mail.send(args.kind, c.email, {
       montoCentavos: c.aporteCentavos ?? c.montoCentavos,
+      ...(recompensa ? { recompensa } : {}),
     });
   },
 });

@@ -1,8 +1,9 @@
 import { v } from "convex/values";
-import { internalMutation, internalQuery } from "./_generated/server";
+import { internalAction, internalMutation, internalQuery } from "./_generated/server";
 import { internal } from "./_generated/api";
 import type { GenericDatabaseReader, GenericDatabaseWriter } from "convex/server";
 import type { DataModel, Doc, Id } from "./_generated/dataModel";
+import { resolvePorts, type RecompensaMail } from "./_lib/ports";
 import {
   cafesPorTotal,
   codigoCorto,
@@ -86,6 +87,101 @@ export async function saldoDe(ctx: Lector, r: Doc<"recompensas">, ahora: number)
 const fecha = (ms: number) =>
   new Date(ms).toLocaleDateString("es-AR", { timeZone: "America/Argentina/Buenos_Aires" });
 
+async function paraMailDe(ctx: Lector, r: Doc<"recompensas">): Promise<RecompensaMail> {
+  const s = await saldoDe(ctx, r, Date.now());
+  const campania = (await ctx.db.get(r.campaniaId))!;
+  return {
+    codigo: r.codigo,
+    qrId: r.qrId,
+    saldo: s.saldo,
+    estado: s.estado,
+    aperturaAt: campania.aperturaAt,
+    venceAt: s.venceAt,
+  };
+}
+
+export const paraMail = internalQuery({
+  args: { campaniaId: v.id("campaigns"), email: v.string() },
+  handler: async (ctx, { campaniaId, email }) => {
+    const r = await ctx.db
+      .query("recompensas")
+      .withIndex("by_campania_email", (q) => q.eq("campaniaId", campaniaId).eq("email", email))
+      .unique();
+    return r ? await paraMailDe(ctx, r) : null;
+  },
+});
+
+export const conSaldo = internalQuery({
+  args: { campaniaId: v.id("campaigns") },
+  handler: async (ctx, { campaniaId }) => {
+    const todas = await ctx.db
+      .query("recompensas")
+      .withIndex("by_campania_email", (q) => q.eq("campaniaId", campaniaId))
+      .collect();
+    const out: { id: Id<"recompensas">; email: string; mail: RecompensaMail }[] = [];
+    for (const r of todas) {
+      const mail = await paraMailDe(ctx, r);
+      if (mail.saldo > 0) out.push({ id: r._id, email: r.email, mail });
+    }
+    return out;
+  },
+});
+
+export const anunciarApertura = internalAction({
+  args: { campaniaId: v.id("campaigns") },
+  handler: async (ctx, { campaniaId }) => {
+    const ports = resolvePorts();
+    if (!ports.mail) return;
+    const lista = await ctx.runQuery(internal.recompensas.conSaldo, { campaniaId });
+    for (const { email, mail } of lista) {
+      try {
+        await ports.mail.send("apertura", email, { recompensa: mail });
+      } catch (e) {
+        console.error("mail apertura falló", email, e);
+      }
+    }
+  },
+});
+
+const DIA = 24 * 60 * 60 * 1000;
+
+// Cron diario: a 30 días del vencimiento, un aviso a quien todavía tenga
+// cafés. Una vez por persona (dedupe en avisosAdmin, send-then-mark).
+export const avisarVencimientos = internalAction({
+  args: { ahora: v.optional(v.number()) },
+  handler: async (ctx, args) => {
+    const ports = resolvePorts();
+    if (!ports.mail) return;
+    const ahora = args.ahora ?? Date.now();
+    const campanias = await ctx.runQuery(internal.recompensas.conApertura, {});
+    for (const c of campanias) {
+      const vence = vencimiento(c.aperturaAt);
+      if (ahora < vence - 30 * DIA || ahora >= vence) continue;
+      const lista = await ctx.runQuery(internal.recompensas.conSaldo, { campaniaId: c._id });
+      for (const { id, email, mail } of lista) {
+        const clave = `vence:${id}`;
+        if (await ctx.runQuery(internal.contributionsInternal.avisoEnviado, { clave })) continue;
+        try {
+          await ports.mail.send("vence_pronto", email, { recompensa: mail });
+          await ctx.runMutation(internal.contributionsInternal.registrarAviso, { clave });
+        } catch (e) {
+          console.error("mail vence_pronto falló", email, e);
+        }
+      }
+    }
+  },
+});
+
+export const conApertura = internalQuery({
+  args: {},
+  handler: async (ctx) => {
+    const todas = await ctx.db.query("campaigns").collect();
+    return todas
+      .filter((c) => c.aperturaAt !== undefined)
+      .map((c) => ({ _id: c._id, aperturaAt: c.aperturaAt! }));
+  },
+});
+
 async function campaniaPorSlug(ctx: Lector, slug: string) {
   return await ctx.db
     .query("campaigns")
@@ -120,6 +216,9 @@ export const fijarApertura = internalMutation({
     await ctx.scheduler.runAfter(0, internal.contributionsInternal.avisarAdmin, {
       kind: "apertura",
       detalle: `Canje habilitado del ${fecha(aperturaAt)} al ${fecha(vencimiento(aperturaAt))}`,
+    });
+    await ctx.scheduler.runAfter(0, internal.recompensas.anunciarApertura, {
+      campaniaId: campania._id,
     });
   },
 });

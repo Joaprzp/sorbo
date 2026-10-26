@@ -50,14 +50,27 @@ export interface FxPort {
   mepCentavosPorUsd(): Promise<number>;
 }
 
-export type MailKind = "acreditacion" | "devolucion" | "meta_cumplida";
+export type MailKind =
+  | "acreditacion"
+  | "devolucion"
+  | "meta_cumplida"
+  | "apertura"
+  | "vence_pronto";
+
+// ADR-0008: lo que el mail necesita saber de la recompensa de esa persona.
+export type RecompensaMail = {
+  codigo: string;
+  qrId: string;
+  saldo: number;
+  estado: "reservado" | "confirmado" | "activo" | "vencido" | "anulado";
+  aperturaAt?: number;
+  venceAt?: number;
+};
+
+export type MailData = { montoCentavos?: number; recompensa?: RecompensaMail };
 
 export interface MailPort {
-  send(
-    kind: MailKind,
-    to: string,
-    data: { montoCentavos?: number },
-  ): Promise<void>;
+  send(kind: MailKind, to: string, data: MailData): Promise<void>;
 }
 
 // Push al cel del admin (brrr). Distinto del mail transaccional: esto es

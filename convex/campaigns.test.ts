@@ -2,7 +2,7 @@ import { test, expect, vi } from "vitest";
 import { convexTest } from "convex-test";
 import schema from "./schema";
 import { api, internal } from "./_generated/api";
-import { setPortsForTesting, type MpPort, type EvmPort, type FxPort, type MailPort, type PushPort, type Ports } from "./_lib/ports";
+import { setPortsForTesting, type MpPort, type EvmPort, type FxPort, type MailData, type MailPort, type PushPort, type Ports } from "./_lib/ports";
 import { CHAINS_SOPORTADAS } from "./_lib/dominio";
 import { esContratoSoportado } from "./_lib/evmChecks";
 
@@ -45,10 +45,15 @@ class MpFake implements MpPort {
 }
 
 const fxFija: FxPort = { mepCentavosPorUsd: async () => 120000 };
-const mailMemoria: MailPort & { enviados: { kind: string; to: string }[] } = {
+const mailMemoria: MailPort & {
+  enviados: { kind: string; to: string }[];
+  conDatos: { kind: string; to: string; data: MailData }[];
+} = {
   enviados: [],
-  async send(kind, to) {
+  conDatos: [],
+  async send(kind, to, data) {
     this.enviados.push({ kind, to });
+    this.conDatos.push({ kind, to, data });
   },
 };
 class EvmFake implements EvmPort {
@@ -1058,4 +1063,54 @@ test("canje: el código corto encuentra el QR solo con sesión", async () => {
     emitidos: 3,
     canjeados: 0,
   });
+});
+
+// --- mails de recompensa (ADR-0008) ---
+
+test("mail: la acreditación con email lleva la recompensa; la devolución, el saldo", async () => {
+  const t = convexTest(schema, modules);
+  await campania(t);
+  mailMemoria.conDatos.length = 0;
+  await acreditar(t, 1_500_000, { email: "m@m.com", diasAtras: 90 });
+  await drenar(t);
+  const acred = mailMemoria.conDatos.find((m) => m.kind === "acreditacion")!;
+  expect(acred.data.recompensa).toMatchObject({ saldo: 2, estado: "reservado" });
+  expect(acred.data.recompensa!.codigo).toMatch(/^JUJ-/);
+
+  await t.action(internal.contributionsInternal.devolucionesDiarias, { ahora: Date.now() });
+  await drenar(t);
+  const dev = mailMemoria.conDatos.find((m) => m.kind === "devolucion")!;
+  expect(dev.data.recompensa).toMatchObject({ saldo: 0, estado: "anulado" });
+});
+
+test("mail: fijarApertura avisa a quien tiene cafés; el vencimiento avisa una sola vez", async () => {
+  const t = convexTest(schema, modules);
+  await t.run(async (ctx) => {
+    await ctx.db.insert("campaigns", {
+      slug: "jujuy",
+      metaCentavos: 500_000,
+      recaudadoNetoCentavos: 0,
+      contribuyentes: 0,
+    });
+  });
+  const { mp } = await acreditar(t, 500_000, { email: "n@n.com" });
+  await acreditar(t, 500_000, { mp }); // sin email: sin recompensa
+  await drenar(t);
+  mailMemoria.conDatos.length = 0;
+  const apertura = Date.now() - 1000;
+  await t.mutation(internal.recompensas.fijarApertura, { slug: "jujuy", aperturaAt: apertura });
+  await drenar(t);
+  const ap = mailMemoria.conDatos.filter((m) => m.kind === "apertura");
+  expect(ap).toHaveLength(1);
+  expect(ap[0]).toMatchObject({ to: "n@n.com", data: { recompensa: { saldo: 1, estado: "activo" } } });
+
+  const DIA_MS = 24 * 60 * 60 * 1000;
+  const casiVence = apertura + 170 * DIA_MS;
+  await t.action(internal.recompensas.avisarVencimientos, { ahora: casiVence });
+  await t.action(internal.recompensas.avisarVencimientos, { ahora: casiVence + DIA_MS });
+  expect(mailMemoria.conDatos.filter((m) => m.kind === "vence_pronto")).toHaveLength(1);
+  // Lejos del vencimiento no avisa.
+  mailMemoria.conDatos.length = 0;
+  await t.action(internal.recompensas.avisarVencimientos, { ahora: apertura + 10 * DIA_MS });
+  expect(mailMemoria.conDatos).toHaveLength(0);
 });

@@ -8,6 +8,7 @@ import type {
   EvmPort,
   EvmTransfer,
   FxPort,
+  MailData,
   MailPort,
   MailKind,
   PushPort,
@@ -266,11 +267,7 @@ export class FxHttp implements FxPort {
 
 export class ResendHttp implements MailPort {
   constructor(private apiKey: string) {}
-  async send(
-    kind: MailKind,
-    to: string,
-    data: { montoCentavos?: number },
-  ) {
+  async send(kind: MailKind, to: string, data: MailData) {
     const base = process.env.SITE_URL ?? "https://sorbolabs.com";
     const res = await fetch("https://api.resend.com/emails", {
       method: "POST",

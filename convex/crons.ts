@@ -31,4 +31,11 @@ crons.interval(
   {},
 );
 
+crons.daily(
+  "vencimiento-recompensas",
+  { hourUTC: 13, minuteUTC: 0 },
+  internal.recompensas.avisarVencimientos,
+  {},
+);
+
 export default crons;
