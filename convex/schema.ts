@@ -20,6 +20,7 @@ export default defineSchema({
     recaudadoNetoCentavos: v.number(),
     contribuyentes: v.number(),
     cumplidaAt: v.optional(v.number()),
+    aperturaAt: v.optional(v.number()),
   }).index("by_slug", ["slug"]),
 
   contribuciones: defineTable({
@@ -48,7 +49,37 @@ export default defineSchema({
     .index("by_token", ["token"])
     .index("by_mpOrderId", ["mpOrderId"])
     .index("by_txHash", ["txHash"])
-    .index("by_devolucion", ["via", "estado", "acreditadaAt"]),
+    .index("by_devolucion", ["via", "estado", "acreditadaAt"])
+    .index("by_campania_email", ["campaniaId", "email"]),
+
+  // ADR-0008: una fila por persona y campaña. Los cafés no se guardan: salen
+  // de sumar sus aportes aprobados; acá solo viven los identificadores.
+  recompensas: defineTable({
+    campaniaId: v.id("campaigns"),
+    email: v.string(),
+    qrId: v.string(),
+    codigo: v.string(),
+    createdAt: v.number(),
+  })
+    .index("by_campania_email", ["campaniaId", "email"])
+    .index("by_qrId", ["qrId"])
+    .index("by_codigo", ["codigo"]),
+
+  dispositivos: defineTable({
+    nombre: v.string(),
+    tokenHash: v.string(),
+    creadoAt: v.number(),
+    venceAt: v.number(),
+    revocadoAt: v.optional(v.number()),
+  }).index("by_tokenHash", ["tokenHash"]),
+
+  canjes: defineTable({
+    recompensaId: v.id("recompensas"),
+    cantidad: v.number(),
+    dispositivoId: v.id("dispositivos"),
+    at: v.number(),
+    deshechoAt: v.optional(v.number()),
+  }).index("by_recompensa", ["recompensaId"]),
 
   // Dedupe de avisos push al admin (un txHash rechazado se re-escanea cada
   // corrida dentro de la ventana — sin esto son ~2000 notificaciones).

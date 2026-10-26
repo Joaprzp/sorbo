@@ -859,3 +859,102 @@ test("refund marcado antes del latch no se ejecuta después", async () => {
   const p = await t.query(api.campaigns.progreso, { slug: "jujuy" });
   expect(p!.recaudadoNetoCentavos).toBe(500_000);
 });
+
+// --- recompensa en café (ADR-0008) ---
+
+async function recompensaDe(t: ReturnType<typeof convexTest>, email: string) {
+  return await t.query(internal.recompensas.porEmail, { slug: "jujuy", email });
+}
+
+test("recompensa: se suma por email y aplica la regla sobre el total", async () => {
+  const t = convexTest(schema, modules);
+  await campania(t);
+  const { mp } = await acreditar(t, 500_000, { email: "Ana@Mail.com " });
+  let r = await recompensaDe(t, "ana@mail.com");
+  expect(r).toMatchObject({ cafes: 1, saldo: 1, estado: "reservado" });
+  expect(r!.codigo).toMatch(/^JUJ-/);
+
+  await acreditar(t, 1_000_000, { email: "ana@mail.com", mp });
+  r = await recompensaDe(t, "ana@mail.com");
+  expect(r).toMatchObject({ cafes: 2, saldo: 2 }); // $15.000 en total, un solo código
+  const filas = await t.run((ctx) => ctx.db.query("recompensas").collect());
+  expect(filas).toHaveLength(1);
+});
+
+test("recompensa: sin email no hay recompensa", async () => {
+  const t = convexTest(schema, modules);
+  await campania(t);
+  await acreditar(t, 9_500_000);
+  const filas = await t.run((ctx) => ctx.db.query("recompensas").collect());
+  expect(filas).toHaveLength(0);
+});
+
+test("recompensa: la devolución anula los cafés de ese aporte", async () => {
+  const t = convexTest(schema, modules);
+  await campania(t);
+  await acreditar(t, 500_000, { email: "b@b.com", diasAtras: 90 });
+  await drenar(t);
+  await t.action(internal.contributionsInternal.devolucionesDiarias, { ahora: Date.now() });
+  await drenar(t);
+  expect(await recompensaDe(t, "b@b.com")).toMatchObject({ cafes: 0, estado: "anulado" });
+});
+
+test("recompensa: el aporte posterior a la meta también suma, y la apertura la activa", async () => {
+  const t = convexTest(schema, modules);
+  await t.run(async (ctx) => {
+    await ctx.db.insert("campaigns", {
+      slug: "jujuy",
+      metaCentavos: 500_000,
+      recaudadoNetoCentavos: 0,
+      contribuyentes: 0,
+    });
+  });
+  const { mp } = await acreditar(t, 500_000, { email: "c@c.com" });
+  await acreditar(t, 1_000_000, { email: "c@c.com", mp }); // ya con la meta cumplida
+  await drenar(t);
+  expect(await recompensaDe(t, "c@c.com")).toMatchObject({ cafes: 2, estado: "confirmado" });
+
+  await t.mutation(internal.recompensas.fijarApertura, {
+    slug: "jujuy",
+    aperturaAt: Date.now() - 1000,
+  });
+  const r = await recompensaDe(t, "c@c.com");
+  expect(r).toMatchObject({ estado: "activo" });
+  expect(r!.venceAt).toBeGreaterThan(Date.now());
+});
+
+test("recompensa: fijarApertura exige la meta cumplida", async () => {
+  const t = convexTest(schema, modules);
+  await campania(t);
+  await expect(
+    t.mutation(internal.recompensas.fijarApertura, { slug: "jujuy", aperturaAt: Date.now() }),
+  ).rejects.toThrow("META_NO_CUMPLIDA");
+});
+
+test("recompensa: cripto cuenta en pesos a MEP del día", async () => {
+  const t = convexTest(schema, modules);
+  await campania(t);
+  const evm = new EvmFake();
+  evm.transfers.push(txBase({ txHash: "0xcafe", usdCents: 5000 })); // 50 USDC
+  setPortsForTesting(puertos(null, evm));
+  await t.action(api.contributions.contribuir, {
+    slug: "jujuy",
+    via: { rail: "crypto", chainId: "base", txHash: "0xcafe", email: "d@d.com" },
+  });
+  await drenar(t);
+  // 50 USD × $1.200 = $60.000 → 1 + 5 = 6 cafés
+  expect(await recompensaDe(t, "d@d.com")).toMatchObject({ cafes: 6 });
+});
+
+test("recompensa: completarRecompensas cubre aportes previos con email", async () => {
+  const t = convexTest(schema, modules);
+  await campania(t);
+  await acreditar(t, 500_000, { email: "e@e.com" });
+  await t.run(async (ctx) => {
+    for (const r of await ctx.db.query("recompensas").collect()) await ctx.db.delete(r._id);
+  });
+  expect(await recompensaDe(t, "e@e.com")).toBeNull();
+  const n = await t.mutation(internal.recompensas.completarRecompensas, { slug: "jujuy" });
+  expect(n).toBe(1);
+  expect(await recompensaDe(t, "e@e.com")).toMatchObject({ cafes: 1 });
+});

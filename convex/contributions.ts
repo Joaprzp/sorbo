@@ -3,6 +3,7 @@ import { action, query } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { resolvePorts } from "./_lib/ports";
 import { CHAINS_SOPORTADAS, MIN_MP_CENTAVOS, MIN_USD_CENTS } from "./_lib/dominio";
+import { normalizarEmail } from "./_lib/recompensa";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const SITE_URL = process.env.SITE_URL ?? "https://sorbolabs.com";
@@ -38,7 +39,7 @@ export const contribuir = action({
     if (args.via.rail === "mp") {
       if (!ports.mp) throw new Error("MP_NO_CONFIGURADO");
       const { montoCentavos } = args.via;
-      const email = args.via.email?.trim().toLowerCase();
+      const email = args.via.email === undefined ? undefined : normalizarEmail(args.via.email);
       if (!Number.isInteger(montoCentavos) || montoCentavos < MIN_MP_CENTAVOS) {
         throw new Error("MONTO_MINIMO");
       }
@@ -90,7 +91,7 @@ export const contribuir = action({
       const evmAddress = process.env.EVM_ADDRESS;
       if (!ports.evm || !evmAddress) throw new Error("RAIL_NO_DISPONIBLE");
       const { chainId, txHash } = args.via;
-      const email = args.via.email?.trim().toLowerCase();
+      const email = args.via.email === undefined ? undefined : normalizarEmail(args.via.email);
       if (!CHAINS_SOPORTADAS.includes(chainId)) throw new Error("RED_NO_SOPORTADA");
       if (email !== undefined && !EMAIL_RE.test(email)) throw new Error("EMAIL_INVALIDO");
       const { id, token } = await ctx.runMutation(

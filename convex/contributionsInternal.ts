@@ -8,6 +8,7 @@ import { ordenAcreditada, decisionExpiracion } from "./_lib/mpChecks";
 import { esTransferValida, esContratoSoportado, centavosPorUsd } from "./_lib/evmChecks";
 import { CHAINS_SOPORTADAS, MIN_USD_CENTS, TECHO_AVISO_USD_CENTS } from "./_lib/dominio";
 import { ars } from "../src/lib/format";
+import { asegurarRecompensa } from "./recompensas";
 
 type Lector = { db: GenericDatabaseReader<DataModel> };
 type Escritor = { db: GenericDatabaseWriter<DataModel> };
@@ -121,6 +122,7 @@ export const acreditar = internalMutation({
           : campania.cumplidaAt,
     });
     await evento(ctx, args.id, "acreditada", t, String(args.aporteCentavos));
+    if (c.email) await asegurarRecompensa(ctx, c.campaniaId, c.email);
     await ctx.scheduler.runAfter(0, internal.contributionsInternal.avisarAdmin, {
       kind: "aporte",
       contribucionId: args.id,
@@ -507,6 +509,7 @@ export const vincularReclamo = internalMutation({
       acreditadaAt: Date.now(),
     });
     await evento(ctx, args.id, "reclamo_ya_acreditado", Date.now());
+    if (c.email) await asegurarRecompensa(ctx, c.campaniaId, c.email);
     if (c.email) {
       await ctx.scheduler.runAfter(0, internal.contributionsInternal.enviarNotificacion, {
         contribucionId: args.id,
