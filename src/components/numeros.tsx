@@ -81,7 +81,7 @@ export function Numeros() {
     <Pieza
       lado={
         <Link to="/jujuy" className="hover:text-azul">
-          Jujuy · AR
+          Salta → Jujuy
         </Link>
       }
       doe={false}
