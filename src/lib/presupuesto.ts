@@ -12,12 +12,13 @@ export type Rubro = {
 };
 
 export const META_PESOS = 75_000_000;
+export const MEP_PESOS = 1_540; // dólar MEP de referencia, octubre 2026
 
 export const SUPUESTOS = [
   { label: "Local", valor: "Café con salón · ~58 m²" },
   { label: "Alquiler", valor: "$1.500.000 / mes" },
   { label: "Equipo", valor: "Tres personas · CCT 389/04" },
-  { label: "Dólar MEP", valor: "$1.540 · Octubre 2026" },
+  { label: "Dólar MEP", valor: `$${MEP_PESOS.toLocaleString("es-AR")} · Octubre 2026` },
 ];
 
 export const RUBROS: Rubro[] = [
@@ -88,7 +89,7 @@ export const RUBROS: Rubro[] = [
     items: [
       { concepto: "Primer stock de café", pesos: 1_000_000 },
       { concepto: "Leche, pastelería y descartables", pesos: 1_000_000 },
-      { concepto: "SESSION de apertura", pesos: 500_000 },
+      { concepto: "Evento de apertura", pesos: 500_000 },
     ],
   },
   {
@@ -122,5 +123,11 @@ export const RUBROS: Rubro[] = [
 export const totalRubro = (r: Rubro) =>
   r.items.reduce((s, i) => s + i.pesos, 0);
 
-export const totalPresupuesto = (rubros: Rubro[] = RUBROS) =>
-  rubros.reduce((s, r) => s + totalRubro(r), 0);
+export const totalPresupuesto = () =>
+  RUBROS.reduce((s, r) => s + totalRubro(r), 0);
+
+export const rubro = (codigo: string) => {
+  const r = RUBROS.find((x) => x.codigo === codigo);
+  if (!r) throw new Error(`Rubro ${codigo} no existe`);
+  return r;
+};

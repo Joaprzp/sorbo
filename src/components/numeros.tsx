@@ -2,17 +2,17 @@ import { Link } from "@tanstack/react-router";
 import { Pieza } from "./pieza";
 import { ars } from "../lib/format";
 import {
+  MEP_PESOS,
   META_PESOS,
-  RUBROS,
   SUPUESTOS,
+  rubro,
   totalRubro,
   type Rubro,
 } from "../lib/presupuesto";
 
 const pesos = (n: number) => ars(n * 100);
 
-const MEP = 1540;
-const COBRO = RUBROS.find((r) => r.codigo === "09")!;
+const COBRO = rubro("09");
 
 // Foto a sangre + banda: la imagen no lleva texto; el texto vive en la banda.
 function Foto({
@@ -75,8 +75,6 @@ function BloqueRubro({ r }: { r: Rubro }) {
   );
 }
 
-const rubro = (codigo: string) => RUBROS.find((r) => r.codigo === codigo)!;
-
 export function Numeros() {
   const neto = META_PESOS - totalRubro(COBRO);
   return (
@@ -115,7 +113,7 @@ export function Numeros() {
         <div className="flex items-baseline justify-between gap-6 py-3">
           <dt>En dólares</dt>
           <dd className="text-azul">
-            ~USD {Math.round(META_PESOS / MEP).toLocaleString("es-AR")}
+            ~USD {Math.round(META_PESOS / MEP_PESOS).toLocaleString("es-AR")}
           </dd>
         </div>
       </dl>
@@ -127,8 +125,8 @@ export function Numeros() {
       />
 
       <div>
-        {RUBROS.slice(0, 2).map((r) => (
-          <BloqueRubro key={r.codigo} r={r} />
+        {["01", "02"].map((c) => (
+          <BloqueRubro key={c} r={rubro(c)} />
         ))}
       </div>
 
@@ -159,8 +157,8 @@ export function Numeros() {
       />
 
       <div>
-        {RUBROS.slice(4).map((r) => (
-          <BloqueRubro key={r.codigo} r={r} />
+        {["05", "06", "07", "08", "09"].map((c) => (
+          <BloqueRubro key={c} r={rubro(c)} />
         ))}
       </div>
 
