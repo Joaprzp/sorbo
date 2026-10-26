@@ -22,40 +22,49 @@ const SITEKEY: string | undefined =
 let cargando: Promise<TurnstileApi> | null = null;
 
 function cargar(): Promise<TurnstileApi> {
-  cargando ??= new Promise((resolve, reject) => {
+  cargando ??= new Promise<TurnstileApi>((resolve, reject) => {
     const s = document.createElement("script");
     s.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
     s.async = true;
     s.onload = () => (window.turnstile ? resolve(window.turnstile) : reject(new Error("VERIFICACION_NO_DISPONIBLE")));
-    s.onerror = () => {
-      cargando = null;
-      reject(new Error("VERIFICACION_NO_DISPONIBLE"));
-    };
+    s.onerror = () => reject(new Error("VERIFICACION_NO_DISPONIBLE"));
     document.head.appendChild(s);
+  }).catch((e: unknown) => {
+    // Sin caché del fallo: el próximo formulario que se monte reintenta.
+    cargando = null;
+    throw e;
   });
   return cargando;
 }
 
+type Espera = { ok: (t: string) => void; mal: (e: Error) => void };
+
 // Un widget por formulario, invisible salvo que Cloudflare pida interacción.
-// `obtener` espera el token; `usado` lo descarta (sirve una sola vez).
+// `tokenTurnstile` espera el token; `descartarTurnstile` lo tira y reinicia el
+// widget (cada token sirve una sola vez).
 export function useTurnstile(accion: AccionTurnstile) {
-  const ref = useRef<HTMLDivElement>(null);
+  const turnstileRef = useRef<HTMLDivElement>(null);
   const id = useRef<string | null>(null);
   const token = useRef<string | null>(null);
   const fallo = useRef(!SITEKEY);
-  const esperando = useRef<{ ok: (t: string) => void; mal: (e: Error) => void }[]>([]);
+  const esperando = useRef<Espera[]>([]);
 
   useEffect(() => {
     if (!SITEKEY) return;
     let vivo = true;
-    const rechazar = () => {
+    fallo.current = false;
+    const rechazar = (codigo: string) => {
+      for (const w of esperando.current.splice(0)) w.mal(new Error(codigo));
+    };
+    // El script o el navegador no dan: no hay verificación posible.
+    const caido = () => {
       fallo.current = true;
-      for (const w of esperando.current.splice(0)) w.mal(new Error("VERIFICACION_NO_DISPONIBLE"));
+      rechazar("VERIFICACION_NO_DISPONIBLE");
     };
     cargar()
       .then((ts) => {
-        if (!vivo || !ref.current) return;
-        id.current = ts.render(ref.current, {
+        if (!vivo || !turnstileRef.current) return;
+        id.current = ts.render(turnstileRef.current, {
           sitekey: SITEKEY,
           action: accion,
           appearance: "interaction-only",
@@ -66,29 +75,52 @@ export function useTurnstile(accion: AccionTurnstile) {
           "expired-callback": () => {
             token.current = null;
           },
+          // Desafío no superado: Cloudflare reintenta solo; quien espera, se entera.
+          "error-callback": () => {
+            token.current = null;
+            rechazar("VERIFICACION_FALLIDA");
+          },
+          "timeout-callback": () => rechazar("VERIFICACION_FALLIDA"),
+          "unsupported-callback": caido,
         });
       })
-      .catch(rechazar);
+      .catch(caido);
     return () => {
       vivo = false;
+      rechazar("VERIFICACION_NO_DISPONIBLE");
       if (id.current) window.turnstile?.remove(id.current);
       id.current = null;
+      token.current = null;
     };
   }, [accion]);
 
-  const obtener = (): Promise<string> => {
+  const tokenTurnstile = (): Promise<string> => {
     if (token.current) return Promise.resolve(token.current);
     if (fallo.current) return Promise.reject(new Error("VERIFICACION_NO_DISPONIBLE"));
     return new Promise((ok, mal) => {
-      esperando.current.push({ ok, mal });
-      setTimeout(() => mal(new Error("VERIFICACION_FALLIDA")), 60_000);
+      const espera: Espera = {
+        ok: (t) => {
+          clearTimeout(reloj);
+          ok(t);
+        },
+        mal: (e) => {
+          clearTimeout(reloj);
+          mal(e);
+        },
+      };
+      // Red lenta o widget trabado: el botón no queda colgado para siempre.
+      const reloj = setTimeout(() => {
+        esperando.current = esperando.current.filter((w) => w !== espera);
+        mal(new Error("VERIFICACION_NO_DISPONIBLE"));
+      }, 30_000);
+      esperando.current.push(espera);
     });
   };
 
-  const usado = () => {
+  const descartarTurnstile = () => {
     token.current = null;
     if (id.current) window.turnstile?.reset(id.current);
   };
 
-  return { ref, obtener, usado };
+  return { turnstileRef, tokenTurnstile, descartarTurnstile };
 }

@@ -14,12 +14,10 @@ export async function exigirHumano(token: string, accion: AccionTurnstile) {
   );
   if (!turnstile || hostnames.size === 0) throw new Error("VERIFICACION_NO_DISPONIBLE");
   if (token.length === 0 || token.length > 2048) throw new Error("VERIFICACION_FALLIDA");
-  let resultado;
-  try {
-    resultado = await turnstile.siteverify(token);
-  } catch {
-    throw new Error("VERIFICACION_FALLIDA");
-  }
+  // Red caída, timeout o respuesta rota: el problema es de Cloudflare, no del visitante.
+  const resultado = await turnstile.siteverify(token).catch(() => {
+    throw new Error("VERIFICACION_NO_DISPONIBLE");
+  });
   if (!tokenValido(resultado, accion, hostnames, process.env.TURNSTILE_PERMITIR_PRUEBA === "1")) {
     throw new Error("VERIFICACION_FALLIDA");
   }

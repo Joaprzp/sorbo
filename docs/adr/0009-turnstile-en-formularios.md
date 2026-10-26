@@ -32,5 +32,10 @@ nunca en producción.
   Si no carga, el formulario avisa que la verificación no está disponible: es
   preferible a aceptar envíos sin verificar.
 - Un token sirve una vez; tras un error el widget se reinicia solo.
+- Cuando Cloudflare pide interacción, el widget aparece con su propio estilo
+  (iframe: bordes, spinner). Es la única excepción a la pieza plana y se
+  acepta: no se puede estilar y aparece solo ante un visitante sospechoso.
+- Si Cloudflare no responde, el visitante lee "no disponible", no "no sos
+  persona": el error es nuestro, no suyo.
 - El widget del dashboard de Cloudflare autoriza solo `sorbolabs.com`. En
   local, el front usa la sitekey de prueba.

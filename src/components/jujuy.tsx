@@ -6,7 +6,7 @@ import { encodeQR } from "qr";
 import { api } from "../../convex/_generated/api";
 import { Pieza } from "./pieza";
 import { ars, cafes } from "../lib/format";
-import { DEMASIADO_TRAFICO, VERIFICACION_FALLIDA, VERIFICACION_NO_DISPONIBLE } from "../lib/errores";
+import { mensajeDeError } from "../lib/errores";
 import { useTurnstile } from "./turnstile";
 import {
   CAFE_EXTRA_CENTAVOS,
@@ -25,18 +25,10 @@ const errores: Record<string, string> = {
   MP_NO_CONFIGURADO: "Mercado Pago no está disponible ahora.",
   CAMPANIA_NO_EXISTE: "La campaña no está disponible.",
   WALLET_INVALIDA: "Esa wallet no parece válida (0x y 40 caracteres).",
-  DEMASIADO_TRAFICO,
-  VERIFICACION_FALLIDA,
-  VERIFICACION_NO_DISPONIBLE,
 };
 
-function mensajeError(e: unknown): string {
-  const msg = e instanceof Error ? e.message : "";
-  for (const [codigo, texto] of Object.entries(errores)) {
-    if (msg.includes(codigo)) return texto;
-  }
-  return "No pudimos tomar el aporte. Probá de nuevo.";
-}
+const mensajeError = (e: unknown) =>
+  mensajeDeError(e, errores, "No pudimos tomar el aporte. Probá de nuevo.");
 
 type ProgresoData = NonNullable<
   FunctionReturnType<typeof api.campaigns.progreso>
@@ -153,7 +145,7 @@ function CampoTrampa({
 
 function FormMp({ sugeridos, min }: { sugeridos: number[]; min: number }) {
   const contribuir = useAction(api.contributions.contribuir);
-  const { ref: humanoRef, obtener: tokenHumano, usado: tokenUsado } = useTurnstile("contribuir_mp");
+  const { turnstileRef, tokenTurnstile, descartarTurnstile } = useTurnstile("contribuir_mp");
   const [monto, setMonto] = useState<number>(sugeridos[0] ?? min);
   const [libre, setLibre] = useState("");
   const [email, setEmail] = useState("");
@@ -179,7 +171,7 @@ function FormMp({ sugeridos, min }: { sugeridos: number[]; min: number }) {
       const r = await contribuir({
         slug: "jujuy",
         website,
-        turnstile: await tokenHumano(),
+        turnstile: await tokenTurnstile(),
         via: {
           rail: "mp",
           montoCentavos: centavos,
@@ -188,7 +180,7 @@ function FormMp({ sugeridos, min }: { sugeridos: number[]; min: number }) {
       });
       if (r.intent.kind === "redirect") window.location.assign(r.intent.url);
     } catch (err) {
-      tokenUsado();
+      descartarTurnstile();
       setError(mensajeError(err));
       setEnviando(false);
     }
@@ -259,7 +251,7 @@ function FormMp({ sugeridos, min }: { sugeridos: number[]; min: number }) {
       </div>
 
       <CampoTrampa value={website} onChange={setWebsite} />
-      <div ref={humanoRef} />
+      <div ref={turnstileRef} />
 
       <div className="flex flex-wrap items-center gap-5">
         <button
@@ -291,7 +283,7 @@ function BloqueCrypto({
   crypto: { address: string; chains: string[]; minUsdCents: number };
 }) {
   const contribuir = useAction(api.contributions.contribuir);
-  const { ref: humanoRef, obtener: tokenHumano, usado: tokenUsado } = useTurnstile("aviso_cripto");
+  const { turnstileRef, tokenTurnstile, descartarTurnstile } = useTurnstile("aviso_cripto");
   const navigate = useNavigate();
   const [copiado, setCopiado] = useState(false);
   const [chain, setChain] = useState(crypto.chains[0] ?? "base");
@@ -351,7 +343,7 @@ function BloqueCrypto({
       const r = await contribuir({
         slug: "jujuy",
         website,
-        turnstile: await tokenHumano(),
+        turnstile: await tokenTurnstile(),
         via: {
           rail: "crypto",
           chainId: chain,
@@ -361,7 +353,7 @@ function BloqueCrypto({
       });
       await navigate({ to: "/jujuy/aporte", search: { t: r.token } });
     } catch (err) {
-      tokenUsado();
+      descartarTurnstile();
       setError(mensajeError(err));
       setEnviando(false);
     }
@@ -446,7 +438,7 @@ function BloqueCrypto({
           Avisá y mandá dentro de 48 h desde esa wallet: los cafés llegan solos. Sin
           aviso, el aporte suma igual pero sin cafés.
         </p>
-        <div ref={humanoRef} />
+        <div ref={turnstileRef} />
         <div>
           <button
             type="submit"

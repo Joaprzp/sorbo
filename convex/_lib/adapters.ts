@@ -336,6 +336,15 @@ export class TurnstileHttp implements TurnstilePort {
       body: new URLSearchParams({ secret: this.secret, response: token }),
     });
     if (!res.ok) throw new Error(`siteverify ${res.status}`);
-    return (await res.json()) as TurnstileResultado;
+    const r: unknown = await res.json();
+    if (typeof r !== "object" || r === null) throw new Error("siteverify sin cuerpo");
+    const o = r as Record<string, unknown>;
+    const meta = o.metadata as Record<string, unknown> | undefined;
+    return {
+      success: o.success === true,
+      action: typeof o.action === "string" ? o.action : undefined,
+      hostname: typeof o.hostname === "string" ? o.hostname : undefined,
+      metadata: { result_with_testing_key: meta?.result_with_testing_key === true },
+    };
   }
 }

@@ -15,12 +15,14 @@ export const join = action({
     if (args.website) {
       return null;
     }
-    await exigirHumano(args.turnstile, "lista_espera");
-    await frenar(ctx, "listaDeEspera");
+    // El email se valida antes de gastar cupo: `frenar` ya no se revierte
+    // junto con la escritura, como cuando esto era una mutación.
     const email = args.email.trim().toLowerCase();
     if (!EMAIL_RE.test(email)) {
       throw new Error("EMAIL_INVALID");
     }
+    await exigirHumano(args.turnstile, "lista_espera");
+    await frenar(ctx, "listaDeEspera");
     await ctx.runMutation(internal.waitlist.anotar, { email });
     return null;
   },

@@ -1,6 +1,7 @@
 // Puertos para dependencias externas (cat. 4 — true external).
 // Producción: adapters HTTP. Tests: fakes in-memory vía setPortsForTesting.
-// Si una env falta, el puerto es null → el rail se oculta en `progreso`.
+// Si una env falta, el puerto es null → el rail se oculta en `progreso`;
+// Turnstile, en cambio, falla cerrado (convex/humano.ts).
 import { MpOrdersHttp, EvmIndexerHttp, FxHttp, ResendHttp, BrrrHttp, TurnstileHttp } from "./adapters";
 
 export interface MpOrderRequest {
