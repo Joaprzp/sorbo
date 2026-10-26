@@ -80,6 +80,8 @@ export async function saldoDe(ctx: Lector, r: Doc<"recompensas">, ahora: number)
     cafes,
     canjeados,
     saldo: Math.max(0, cafes - canjeados),
+    cumplida: campania.cumplidaAt !== undefined,
+    aperturaAt: campania.aperturaAt,
     estado: estadoRecompensa({
       cafes,
       cumplida: campania.cumplidaAt !== undefined,
@@ -91,27 +93,28 @@ export async function saldoDe(ctx: Lector, r: Doc<"recompensas">, ahora: number)
 }
 
 
-async function paraMailDe(ctx: Lector, r: Doc<"recompensas">): Promise<RecompensaMail> {
-  const s = await saldoDe(ctx, r, Date.now());
-  const campania = (await ctx.db.get(r.campaniaId))!;
+// `ahora` llega de la acción que manda el mail: una consulta no debe leer el
+// reloj (Convex cachea su resultado y no la re-corre cuando pasa el tiempo).
+async function paraMailDe(ctx: Lector, r: Doc<"recompensas">, ahora: number): Promise<RecompensaMail> {
+  const s = await saldoDe(ctx, r, ahora);
   return {
     codigo: r.codigo,
     qrId: r.qrId,
     saldo: s.saldo,
     estado: s.estado,
-    aperturaAt: campania.aperturaAt,
+    aperturaAt: s.aperturaAt,
     venceAt: s.venceAt,
   };
 }
 
 export const paraMail = internalQuery({
-  args: { campaniaId: v.id("campaigns"), email: v.string() },
-  handler: async (ctx, { campaniaId, email }) => {
+  args: { campaniaId: v.id("campaigns"), email: v.string(), ahora: v.number() },
+  handler: async (ctx, { campaniaId, email, ahora }) => {
     const r = await ctx.db
       .query("recompensas")
       .withIndex("by_campania_email", (q) => q.eq("campaniaId", campaniaId).eq("email", email))
       .unique();
-    return r ? await paraMailDe(ctx, r) : null;
+    return r ? await paraMailDe(ctx, r, ahora) : null;
   },
 });
 
@@ -136,7 +139,7 @@ type Envio = { kind: "meta_cumplida" | "apertura" | "vence_pronto"; campaniaId: 
 
 // Un mail por acción: uno que falla no frena al resto. Apertura y vencimiento
 // solo a quien tiene cafés; el vencimiento, una vez por persona
-// (send-then-mark en avisosAdmin).
+// (send-then-mark en avisosEnviados).
 export const enviarMail = internalAction({
   args: {
     kind: v.union(v.literal("meta_cumplida"), v.literal("apertura"), v.literal("vence_pronto")),
@@ -146,19 +149,39 @@ export const enviarMail = internalAction({
   handler: async (ctx, { kind, campaniaId, email }: Envio) => {
     const ports = resolvePorts();
     if (!ports.mail) return;
-    const recompensa = await ctx.runQuery(internal.recompensas.paraMail, { campaniaId, email });
+    const recompensa = await ctx.runQuery(internal.recompensas.paraMail, {
+      campaniaId,
+      email,
+      ahora: Date.now(),
+    });
     if (kind !== "meta_cumplida" && (!recompensa || recompensa.saldo === 0)) return;
     const clave = `vence:${campaniaId}:${email}`;
     if (
       kind === "vence_pronto" &&
-      (await ctx.runQuery(internal.contributionsInternal.avisoEnviado, { clave }))
+      (await ctx.runQuery(internal.recompensas.avisoEnviado, { clave }))
     ) {
       return;
     }
     await ports.mail.send(kind, email, recompensa ? { recompensa } : {});
     if (kind === "vence_pronto") {
-      await ctx.runMutation(internal.contributionsInternal.registrarAviso, { clave });
+      await ctx.runMutation(internal.recompensas.registrarAviso, { clave });
     }
+  },
+});
+
+export const avisoEnviado = internalQuery({
+  args: { clave: v.string() },
+  handler: async (ctx, { clave }) =>
+    (await ctx.db
+      .query("avisosEnviados")
+      .withIndex("by_clave", (q) => q.eq("clave", clave))
+      .first()) !== null,
+});
+
+export const registrarAviso = internalMutation({
+  args: { clave: v.string() },
+  handler: async (ctx, { clave }) => {
+    await ctx.db.insert("avisosEnviados", { clave, at: Date.now() });
   },
 });
 
@@ -228,8 +251,8 @@ export const campania = internalQuery({
 });
 
 export const porEmail = internalQuery({
-  args: { slug: v.string(), email: v.string() },
-  handler: async (ctx, { slug, email }) => {
+  args: { slug: v.string(), email: v.string(), ahora: v.optional(v.number()) },
+  handler: async (ctx, { slug, email, ahora }) => {
     const campania = await campaniaPorSlug(ctx, slug);
     if (!campania) return null;
     const r = await ctx.db
@@ -237,7 +260,8 @@ export const porEmail = internalQuery({
       .withIndex("by_campania_email", (q) => q.eq("campaniaId", campania._id).eq("email", email))
       .unique();
     if (!r) return null;
-    return { codigo: r.codigo, qrId: r.qrId, ...(await saldoDe(ctx, r, Date.now())) };
+    // Solo para terminal y tests: sin `ahora` el estado se calcula al momento.
+    return { codigo: r.codigo, qrId: r.qrId, ...(await saldoDe(ctx, r, ahora ?? Date.now())) };
   },
 });
 

@@ -4,9 +4,9 @@ import { Link } from "@tanstack/react-router";
 import type { Id } from "../../convex/_generated/dataModel";
 import { api } from "../../convex/_generated/api";
 import { Pieza } from "./pieza";
-import { tokenStaff } from "../lib/staffSesion";
+import { tokenStaff, useAhora } from "../lib/staffSesion";
 import { cafes as cafesN, fechaAR } from "../lib/format";
-import type { EstadoRecompensa } from "../../convex/_lib/recompensa";
+import { DESHACER_MS, estadoRecompensa, type EstadoRecompensa } from "../../convex/_lib/recompensa";
 
 const cafes = (n: number) => (n === 0 ? "Sin cafés" : cafesN(n));
 
@@ -36,9 +36,10 @@ function Mostrador({
 }: {
   qrId: string;
   saldo: number;
-  canjes: { id: Id<"canjes">; cantidad: number; at: number; deshecho: boolean; deshacible: boolean }[];
+  canjes: { id: Id<"canjes">; cantidad: number; at: number; deshecho: boolean }[];
   token: string;
 }) {
+  const ahora = useAhora(5_000);
   const canjear = useMutation(api.staff.canjear);
   const deshacer = useMutation(api.staff.deshacer);
   const [cantidad, setCantidad] = useState(1);
@@ -101,7 +102,7 @@ function Mostrador({
               <span className={c.deshecho ? "line-through" : ""}>
                 {cafes(c.cantidad)} · {new Date(c.at).toLocaleString("es-AR", { timeZone: "America/Argentina/Buenos_Aires" })}
               </span>
-              {c.deshacible && (
+              {!c.deshecho && ahora - c.at < DESHACER_MS && (
                 <button
                   type="button"
                   onClick={() => void deshacer({ canjeId: c.id, token })}
@@ -121,6 +122,8 @@ function Mostrador({
 export function Canje({ qrId }: { qrId: string }) {
   const token = tokenStaff();
   const r = useQuery(api.staff.ver, { qrId, token });
+  const ahora = useAhora();
+  const estado = r ? estadoRecompensa({ cafes: r.cafes, cumplida: r.cumplida, aperturaAt: r.aperturaAt, ahora }) : null;
   return (
     <Pieza
       lado={
@@ -145,7 +148,7 @@ export function Canje({ qrId }: { qrId: string }) {
               {cafes(r.saldo)}.
             </h1>
             <p className="mt-8 max-w-2xl text-xs uppercase leading-loose tracking-[0.17em] sm:text-base">
-              {bajada(r.estado, r.venceAt)}
+              {bajada(estado!, r.venceAt)}
             </p>
             <dl className="mt-10 border-t border-azul/40">
               <div className={fila}>
@@ -159,7 +162,7 @@ export function Canje({ qrId }: { qrId: string }) {
                 </div>
               )}
             </dl>
-            {r.staff && token && r.estado === "activo" && (
+            {r.staff && token && estado === "activo" && (
               <Mostrador qrId={qrId} saldo={r.saldo} canjes={r.staff.canjes} token={token} />
             )}
           </>

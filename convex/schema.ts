@@ -95,6 +95,12 @@ export default defineSchema({
 
   // Dedupe de avisos push al admin (un txHash rechazado se re-escanea cada
   // corrida dentro de la ventana — sin esto son ~2000 notificaciones).
+  // Mails al contribuyente que van una sola vez (aviso de vencimiento).
+  avisosEnviados: defineTable({
+    clave: v.string(),
+    at: v.number(),
+  }).index("by_clave", ["clave"]),
+
   avisosAdmin: defineTable({
     clave: v.string(),
     at: v.number(),

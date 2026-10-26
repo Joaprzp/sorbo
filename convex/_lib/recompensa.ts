@@ -5,6 +5,7 @@ export const PRIMER_CAFE_CENTAVOS = 500_000; // $5.000
 export const CAFE_EXTRA_CENTAVOS = 1_000_000; // cada $10.000 más
 export const TOPE_CAFES = 10;
 export const MESES_DE_CANJE = 6;
+export const DESHACER_MS = 5 * 60 * 1000; // un canje se puede deshacer 5 min
 const ART_OFFSET_MS = -3 * 60 * 60 * 1000; // Argentina, sin horario de verano
 
 // Por persona, sobre el total de sus aportes aprobados.

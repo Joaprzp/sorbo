@@ -3,7 +3,7 @@ import { useConvex, useMutation, useQuery } from "convex/react";
 import { useNavigate } from "@tanstack/react-router";
 import { api } from "../../convex/_generated/api";
 import { Pieza } from "./pieza";
-import { claveDispositivo, guardarTokenStaff, tokenStaff } from "../lib/staffSesion";
+import { claveDispositivo, guardarTokenStaff, tokenStaff, useAhora } from "../lib/staffSesion";
 import { fechaAR } from "../lib/format";
 
 const campo =
@@ -153,7 +153,10 @@ function Buscador({ token, nombre, venceAt, alSalir }: {
 export function Staff() {
   const [token, setToken] = useState(tokenStaff);
   // Sin token guardado no hay nada que validar: el ingreso se muestra ya.
-  const sesion = useQuery(api.staff.sesion, token ? { token } : "skip");
+  const consulta = useQuery(api.staff.sesion, token ? { token } : "skip");
+  const ahora = useAhora();
+  // Vencida en el reloj de la página aunque la consulta no se haya re-corrido.
+  const sesion = consulta && consulta.venceAt > ahora ? consulta : consulta === undefined ? undefined : null;
   const salir = () => {
     guardarTokenStaff(null);
     setToken(undefined);

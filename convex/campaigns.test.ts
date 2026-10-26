@@ -994,7 +994,9 @@ test("staff: PIN correcto abre sesión; el QR público no muestra el código", a
   const t = convexTest(schema, modules);
   const r = await conApertura(t);
   const publico = await t.query(api.staff.ver, { qrId: r.qrId });
-  expect(publico).toMatchObject({ saldo: 3, estado: "activo", staff: null });
+  expect(publico).toMatchObject({ saldo: 3, cumplida: true, staff: null });
+  expect(publico!.aperturaAt).toBeDefined();
+  expect(publico).not.toHaveProperty("codigo");
   const token = await sesionStaff(t);
   expect(await t.query(api.staff.sesion, { token })).toMatchObject({ nombre: "Tablet barra" });
   const conStaff = await t.query(api.staff.ver, { qrId: r.qrId, token });
@@ -1213,3 +1215,22 @@ test("escala: la apertura llega a todos aunque sean más que una página", async
     emitidos: N,
   });
 }, 60_000);
+
+test("staff: la sesión vencida y el deshacer tardío los frena el servidor", async () => {
+  process.env.STAFF_PIN = "482193";
+  const t = convexTest(schema, modules);
+  const r = await conApertura(t);
+  const token = await sesionStaff(t);
+  await t.mutation(api.staff.canjear, { qrId: r.qrId, cantidad: 1, token });
+  const v = await t.query(api.staff.ver, { qrId: r.qrId, token });
+  await t.run(async (ctx) => {
+    await ctx.db.patch(v!.staff!.canjes[0].id, { at: Date.now() - 6 * 60 * 1000 });
+  });
+  await expect(t.mutation(api.staff.deshacer, { canjeId: v!.staff!.canjes[0].id, token })).rejects.toThrow(
+    "NO_DESHACIBLE",
+  );
+  await t.run(async (ctx) => {
+    for (const d of await ctx.db.query("dispositivos").collect()) await ctx.db.patch(d._id, { venceAt: Date.now() - 1 });
+  });
+  await expect(t.mutation(api.staff.canjear, { qrId: r.qrId, cantidad: 1, token })).rejects.toThrow("SIN_SESION");
+});

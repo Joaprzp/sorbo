@@ -282,21 +282,31 @@ export const barrerExpiracionMp = internalAction({
 
 const VENTANA_DEVOLUCION_MS = 89 * 86_400_000;
 
+// Con la meta cumplida no hay devoluciones: el cron sale sin leer aportes.
+export const hayCampaniaAbierta = internalQuery({
+  args: {},
+  handler: async (ctx) => {
+    const campanias = await ctx.db.query("campaigns").take(50);
+    return campanias.some((c) => c.cumplidaAt === undefined);
+  },
+});
+
 export const aprobadasParaDevolucion = internalQuery({
-  args: { antesDe: v.number() },
-  handler: async (ctx, { antesDe }) => {
-    const rows = await ctx.db
+  args: { antesDe: v.number(), cursor: v.union(v.string(), v.null()) },
+  handler: async (ctx, { antesDe, cursor }) => {
+    const pagina = await ctx.db
       .query("contribuciones")
       .withIndex("by_devolucion", (q) =>
         q.eq("via", "mp").eq("estado", "aprobada").lte("acreditadaAt", antesDe),
       )
-      .collect();
-    const out = [];
-    for (const c of rows) {
+      .paginate({ numItems: 200, cursor });
+    const ids = [];
+    for (const c of pagina.page) {
+      if (c.refundEstado !== undefined) continue;
       const camp = await ctx.db.get(c.campaniaId);
-      if (camp && camp.cumplidaAt === undefined) out.push(c);
+      if (camp && camp.cumplidaAt === undefined) ids.push(c._id);
     }
-    return out;
+    return { ids, isDone: pagina.isDone, continueCursor: pagina.continueCursor };
   },
 });
 
@@ -361,22 +371,29 @@ export const devolucionesDiarias = internalAction({
   args: { ahora: v.optional(v.number()) },
   handler: async (ctx, args) => {
     const ahora = args.ahora ?? Date.now();
-    const elegibles = await ctx.runQuery(
-      internal.contributionsInternal.aprobadasParaDevolucion,
-      { antesDe: ahora - VENTANA_DEVOLUCION_MS },
-    );
-    for (const c of elegibles) {
-      const marcada = await ctx.runMutation(
-        internal.contributionsInternal.marcarReembolsoPendiente,
-        { id: c._id },
-      );
-      if (marcada) {
-        await ctx.scheduler.runAfter(
-          0,
-          internal.contributionsInternal.ejecutarReembolso,
-          { id: c._id },
+    if (!(await ctx.runQuery(internal.contributionsInternal.hayCampaniaAbierta, {}))) return;
+    let cursor: string | null = null;
+    for (;;) {
+      const pagina: { ids: Id<"contribuciones">[]; isDone: boolean; continueCursor: string } =
+        await ctx.runQuery(internal.contributionsInternal.aprobadasParaDevolucion, {
+          antesDe: ahora - VENTANA_DEVOLUCION_MS,
+          cursor,
+        });
+      for (const id of pagina.ids) {
+        const marcada = await ctx.runMutation(
+          internal.contributionsInternal.marcarReembolsoPendiente,
+          { id },
         );
+        if (marcada) {
+          await ctx.scheduler.runAfter(
+            0,
+            internal.contributionsInternal.ejecutarReembolso,
+            { id },
+          );
+        }
       }
+      if (pagina.isDone) break;
+      cursor = pagina.continueCursor;
     }
   },
 });
@@ -776,6 +793,7 @@ export const enviarNotificacion = internalAction({
     const recompensa = await ctx.runQuery(internal.recompensas.paraMail, {
       campaniaId: c.campaniaId,
       email: c.email,
+      ahora: Date.now(),
     });
     await ports.mail.send(args.kind, c.email, {
       montoCentavos: c.aporteCentavos ?? c.montoCentavos,

@@ -4,6 +4,7 @@ import type { GenericDatabaseReader, GenericDatabaseWriter } from "convex/server
 import type { DataModel, Doc } from "./_generated/dataModel";
 import { internal } from "./_generated/api";
 import { saldoDe } from "./recompensas";
+import { DESHACER_MS } from "./_lib/recompensa";
 
 // ADR-0008: el staff del local entra con un PIN por dispositivo y canjea cafés.
 
@@ -21,15 +22,7 @@ const BLOQUEO_MS = 15 * MIN;
 const FALLIDOS_DISPOSITIVO = 5;
 const FALLIDOS_GLOBAL = 20;
 const PIN_MINIMO = 6;
-const DESHACER_MS = 5 * MIN;
 
-const estadoV = v.union(
-  v.literal("reservado"),
-  v.literal("confirmado"),
-  v.literal("activo"),
-  v.literal("vencido"),
-  v.literal("anulado"),
-);
 
 async function sha256(texto: string): Promise<string> {
   const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(texto));
@@ -51,10 +44,13 @@ function mismoPin(a: string, b: string): boolean {
   return dif === 0;
 }
 
+// `ahora: null` en consultas: no leen el reloj (Convex las cachea y no las
+// re-corre cuando pasa el tiempo). El vencimiento de la sesión lo aplican las
+// mutaciones y el cliente con `venceAt`.
 async function dispositivoDe(
   ctx: Lector,
   token: string | undefined,
-  ahora: number,
+  ahora: number | null,
 ): Promise<Doc<"dispositivos"> | null> {
   if (!token) return null;
   const tokenHash = await sha256(token);
@@ -62,7 +58,8 @@ async function dispositivoDe(
     .query("dispositivos")
     .withIndex("by_tokenHash", (q) => q.eq("tokenHash", tokenHash))
     .unique();
-  if (!d || d.revocadoAt !== undefined || d.venceAt <= ahora) return null;
+  if (!d || d.revocadoAt !== undefined) return null;
+  if (ahora !== null && d.venceAt <= ahora) return null;
   return d;
 }
 
@@ -135,7 +132,7 @@ export const sesion = query({
   args: { token: v.optional(v.string()) },
   returns: v.union(v.null(), v.object({ nombre: v.string(), venceAt: v.number() })),
   handler: async (ctx, { token }) => {
-    const d = await dispositivoDe(ctx, token, Date.now());
+    const d = await dispositivoDe(ctx, token, null);
     return d ? { nombre: d.nombre, venceAt: d.venceAt } : null;
   },
 });
@@ -149,7 +146,8 @@ export const ver = query({
     v.object({
       saldo: v.number(),
       cafes: v.number(),
-      estado: estadoV,
+      cumplida: v.boolean(),
+      aperturaAt: v.optional(v.number()),
       venceAt: v.optional(v.number()),
       staff: v.union(
         v.null(),
@@ -161,7 +159,6 @@ export const ver = query({
               cantidad: v.number(),
               at: v.number(),
               deshecho: v.boolean(),
-              deshacible: v.boolean(),
             }),
           ),
         }),
@@ -174,10 +171,17 @@ export const ver = query({
       .withIndex("by_qrId", (q) => q.eq("qrId", qrId))
       .unique();
     if (!r) return null;
-    const ahora = Date.now();
-    const s = await saldoDe(ctx, r, ahora);
-    const publico = { saldo: s.saldo, cafes: s.cafes, estado: s.estado, venceAt: s.venceAt };
-    if (!(await dispositivoDe(ctx, token, ahora))) return { ...publico, staff: null };
+    // Hechos, no estado: el cliente calcula reservado/activo/vencido con su
+    // reloj (estadoRecompensa); el canje lo vuelve a validar el servidor.
+    const s = await saldoDe(ctx, r, 0);
+    const publico = {
+      saldo: s.saldo,
+      cafes: s.cafes,
+      cumplida: s.cumplida,
+      aperturaAt: s.aperturaAt,
+      venceAt: s.venceAt,
+    };
+    if (!(await dispositivoDe(ctx, token, null))) return { ...publico, staff: null };
     const canjes = await ctx.db
       .query("canjes")
       .withIndex("by_recompensa", (q) => q.eq("recompensaId", r._id))
@@ -192,7 +196,6 @@ export const ver = query({
           cantidad: c.cantidad,
           at: c.at,
           deshecho: c.deshechoAt !== undefined,
-          deshacible: c.deshechoAt === undefined && ahora - c.at < DESHACER_MS,
         })),
       },
     };
@@ -203,7 +206,7 @@ export const buscarCodigo = query({
   args: { codigo: v.string(), token: v.string() },
   returns: v.union(v.string(), v.null()),
   handler: async (ctx, { codigo, token }) => {
-    if (!(await dispositivoDe(ctx, token, Date.now()))) throw new Error("SIN_SESION");
+    if (!(await dispositivoDe(ctx, token, null))) throw new Error("SIN_SESION");
     const limpio = codigo.trim().toUpperCase().replace(/^JUJ-?/, "");
     const r = await ctx.db
       .query("recompensas")
@@ -265,13 +268,12 @@ export const revocarDispositivo = internalMutation({
 
 // Desde `bunx convex run`: suma por páginas para no pasar el límite de lecturas.
 export const resumenPagina = internalQuery({
-  args: { campaniaId: v.id("campaigns"), cursor: v.union(v.string(), v.null()) },
-  handler: async (ctx, { campaniaId, cursor }) => {
+  args: { campaniaId: v.id("campaigns"), cursor: v.union(v.string(), v.null()), ahora: v.number() },
+  handler: async (ctx, { campaniaId, cursor, ahora }) => {
     const p = await ctx.db
       .query("recompensas")
       .withIndex("by_campania_email", (q) => q.eq("campaniaId", campaniaId))
       .paginate({ numItems: 100, cursor });
-    const ahora = Date.now();
     let emitidos = 0;
     let canjeados = 0;
     for (const r of p.page) {
@@ -292,7 +294,11 @@ export const resumenRecompensas = internalAction({
     let cursor: string | null = null;
     for (;;) {
       const p: { personas: number; emitidos: number; canjeados: number; isDone: boolean; continueCursor: string } =
-        await ctx.runQuery(internal.staff.resumenPagina, { campaniaId: campania._id, cursor });
+        await ctx.runQuery(internal.staff.resumenPagina, {
+          campaniaId: campania._id,
+          cursor,
+          ahora: Date.now(),
+        });
       total.personas += p.personas;
       total.emitidos += p.emitidos;
       total.canjeados += p.canjeados;
