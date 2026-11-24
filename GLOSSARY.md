@@ -13,7 +13,7 @@ La marca y el local. En el logotipo va en minúscula («sorbo», con bajada «LA
 Cualquier unidad de comunicación de la marca: story, feed, ficha, menú, y — a definir en este repo — la página web. Regla madre: una sola idea por pieza, todo alineado a la izquierda, todo plano.
 
 **Doe**:
-El isotipo. La figura que observa, prueba y ajusta. Uno por pieza como máximo, en color plano (blanco o azul), apoyado sobre una línea o alineado al margen izquierdo. No es obligatorio: se usa cuando la pieza necesita calidez. Es el único elemento que puede convivir con Gluten.
+El isotipo. La figura que observa, prueba y ajusta. Su forma canónica es el busto casi cuadrado: el dibujo del v1 recortado por su marco de 1036 × 989, que es parte del isotipo. La figura de cuerpo entero está deprecada. Uno por pieza como máximo, en color plano (blanco o azul), apoyado sobre una línea o alineado al margen izquierdo. No es obligatorio: se usa cuando la pieza necesita calidez. Es el único elemento que puede convivir con Gluten.
 
 **Banda**:
 Zona de color plano adyacente a una foto, donde vive el texto. La partición foto/banda es el único modo válido de combinar imagen y texto: nunca texto sobre foto.

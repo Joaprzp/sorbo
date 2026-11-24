@@ -21,7 +21,8 @@ marketing; las decisiones de composición viven en `docs/adr/` y el glosario en
 - Marca: colores sólo desde los tokens de `src/styles.css` (oklch del manual);
   tipografía Archivo / Geist Mono; todo plano — sin gradientes, sombras,
   bordes redondeados ni animaciones. Doe (isotipo) aparece una vez, vía
-  `src/components/doe.tsx`.
+  `src/components/doe.tsx`, siempre en su marco casi cuadrado de 1036 × 989
+  (busto recortado; el cuerpo entero está deprecado).
 - `src/routeTree.gen.ts` y `convex/_generated/` son generados — no editar a
   mano (regenerar con `bun run dev` / `bunx convex dev`).
 
