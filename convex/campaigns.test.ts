@@ -150,9 +150,13 @@ test("turnstile: sin token válido, de la acción correcta, no se crea nada", as
       "VERIFICACION_FALLIDA",
     );
   }
-  await expect(t.action(api.waitlist.join, { turnstile: "contribuir_mp", email: "a@x.com" })).rejects.toThrow(
-    "VERIFICACION_FALLIDA",
-  );
+  await expect(
+    t.action(api.contributions.contribuir, {
+      turnstile: "contribuir_mp",
+      slug: "jujuy",
+      via: { rail: "crypto", chainId: "base" },
+    }),
+  ).rejects.toThrow("VERIFICACION_FALLIDA");
   expect(mp.orders.size).toBe(0);
   const filas = await t.run((ctx) => ctx.db.query("contribuciones").collect());
   expect(filas).toHaveLength(0);
@@ -211,17 +215,6 @@ test("turnstile: sin hostnames configurados, falla cerrado", async () => {
   } finally {
     process.env.TURNSTILE_HOSTNAMES = antes;
   }
-});
-
-test("lista de espera: un email inválido no gasta cupo", async () => {
-  const t = nuevoTest();
-  setPortsForTesting(puertos(null));
-  for (let i = 0; i < 30; i++) {
-    await expect(t.action(api.waitlist.join, { turnstile: "lista_espera", email: "no-es-email" })).rejects.toThrow(
-      "EMAIL_INVALID",
-    );
-  }
-  await t.action(api.waitlist.join, { turnstile: "lista_espera", email: "ok@x.com" });
 });
 
 test("turnstile: sin configuración, falla cerrado", async () => {
@@ -1394,13 +1387,6 @@ test("recompensa: un aviso cripto posterior al pago no da cafés", async () => {
   // El aporte igual cuenta para la meta.
   const p = await t.query(api.campaigns.progreso, { slug: "jujuy" });
   expect(p!.recaudadoNetoCentavos).toBe(6_000_000);
-});
-
-test("límites: pasado el tope global, la lista de espera frena", async () => {
-  const t = nuevoTest();
-  setPortsForTesting(puertos(null));
-  for (let i = 0; i < 20; i++) await t.action(api.waitlist.join, { turnstile: "lista_espera", email: `w${i}@x.com` });
-  await expect(t.action(api.waitlist.join, { turnstile: "lista_espera", email: "w99@x.com" })).rejects.toThrow("DEMASIADO_TRAFICO");
 });
 
 test("staff: con PIN de 5, 5 fallidos en el día traban los ingresos nuevos hasta desbloquear", async () => {

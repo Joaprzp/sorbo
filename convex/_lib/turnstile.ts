@@ -1,7 +1,7 @@
 import type { TurnstileResultado } from "./ports";
 
 // Acciones de Turnstile: una por formulario protegido, igual que en el front.
-export type AccionTurnstile = "contribuir_mp" | "aviso_cripto" | "lista_espera";
+export type AccionTurnstile = "contribuir_mp" | "aviso_cripto";
 
 // El token vale si Cloudflare dice que sí, para esta acción y desde un dominio
 // nuestro. Las claves de prueba de Cloudflare (sin acción, hostname

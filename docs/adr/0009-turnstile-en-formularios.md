@@ -39,3 +39,6 @@ nunca en producción.
   persona": el error es nuestro, no suyo.
 - El widget del dashboard de Cloudflare autoriza solo `sorbolabs.com`. En
   local, el front usa la sitekey de prueba.
+
+Actualizada por 0010: la lista de espera se retiró cuando abrió el local de
+Salta; las acciones vigentes son `contribuir_mp` y `aviso_cripto`.

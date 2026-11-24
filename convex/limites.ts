@@ -14,7 +14,6 @@ const config = {
   verificarTx: { kind: "token bucket", rate: 20, period: MINUTE, capacity: 10 },
   // Vuelta de MP: un GET a MP por llamada.
   reconciliar: { kind: "token bucket", rate: 120, period: MINUTE, capacity: 60 },
-  listaDeEspera: { kind: "token bucket", rate: 30, period: MINUTE, capacity: 20 },
 } as const;
 
 const limites = new RateLimiter(components.rateLimiter, config);

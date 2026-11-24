@@ -56,7 +56,7 @@ Lotes, pruebas, recetas y documentos internos. Con guion («LAB-001»). Sólo se
 ### Operación
 
 **Lista de espera**:
-El mecanismo de registro previo a la apertura del local. Quien se anota recibe aviso cuando Sorbo abre o cuando hay un SESSION. En la landing es el cierre de la pieza y la única acción del visitante.
+Retirada cuando abrió el local de Salta (ADR-0010). Fue el registro previo a la apertura del local; los emails quedan guardados en la tabla `waitlist`, sin formulario ni altas nuevas.
 
 **Campaña**:
 La recaudación abierta para financiar una sucursal nueva. La primera y única definida hoy es la de Jujuy; cada ciudad futura tendría su propia campaña y su propia pieza. No tiene fecha de cierre: queda abierta hasta llegar a la meta.
@@ -74,7 +74,7 @@ El objetivo bruto en pesos de la campaña, elegido ya descontando el costo del c
 El desglose público de la meta por rubro (local, obra, salón, equipamiento, habilitaciones, apertura, tres meses de operación, imprevistos y costo del cobro). Vive en su propia pieza, `/jujuy/numeros`, y suma exactamente la meta.
 
 **Contribuyente**:
-Quien hace una contribución. Anónimo por defecto; si deja su email recibe novedades de la campaña — acreditación, devolución, meta cumplida, apertura — y su recompensa. Distinto de la lista de espera: son intenciones distintas y no se mezclan.
+Quien hace una contribución. Anónimo por defecto; si deja su email recibe novedades de la campaña — acreditación, devolución, meta cumplida, apertura — y su recompensa. Distinto de la lista de espera (retirada): son intenciones distintas y no se mezclan.
 
 **Recompensa**:
 Los cafés que devuelve un aporte con email (ADR-0008): $5.000 da 1 café y cada $10.000 más suma 1, con tope de 10 por persona. Se calcula por email sobre la suma de sus aportes aprobados, así que una devolución la baja sola. Un aporte cripto cuenta solo si antes de pagar se avisó con email y la wallet de origen, y la transfer sale de esa wallet dentro de las 48 horas: el hash es público y cualquiera podría reclamar una transfer ajena. Todos los cafés de la carta, durante los 6 meses siguientes a la **Apertura**. Nada más: sin eventos ni nombres en la pared.
