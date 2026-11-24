@@ -65,11 +65,6 @@ export const contribucionDoc = v.object({
 });
 
 export default defineSchema({
-  waitlist: defineTable({
-    email: v.string(),
-    createdAt: v.number(),
-  }).index("by_email", ["email"]),
-
   campaigns: defineTable(campaniaCampos).index("by_slug", ["slug"]),
 
   contribuciones: defineTable(contribucionCampos)

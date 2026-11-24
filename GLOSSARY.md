@@ -56,7 +56,7 @@ Lotes, pruebas, recetas y documentos internos. Con guion («LAB-001»). Sólo se
 ### Operación
 
 **Lista de espera**:
-Retirada cuando abrió el local de Salta (ADR-0010). Fue el registro previo a la apertura del local; los emails quedan guardados en la tabla `waitlist`, sin formulario ni altas nuevas.
+Retirada cuando abrió el local de Salta (ADR-0010). Fue el registro previo a la apertura del local; nadie de afuera se anotó y se borró con su tabla.
 
 **Campaña**:
 La recaudación abierta para financiar una sucursal nueva. La primera y única definida hoy es la de Jujuy; cada ciudad futura tendría su propia campaña y su propia pieza. No tiene fecha de cierre: queda abierta hasta llegar a la meta.
